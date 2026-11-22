@@ -47,7 +47,9 @@ python3 -m venv .venv
 .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001 --report-dir results/local/public --keep-state
 ```
 
-The supported subset is one case and one step. Reports go to `results/local/public/`. The adapter runs independently of Web and keeps its SQLite state under the supplied `--state-dir`. An initial step requires both company data and invoice facts. Input validation returns a field path, including for values outside the exact C# `decimal` range. Unsupported rule branches exit with a diagnostic on stderr.
+The supported subset is one case and one step. Reports go to `results/local/public/`. The adapter runs independently of Web and keeps its SQLite state under the supplied `--state-dir`. An initial step requires both company data and invoice facts. Input validation returns a field path. Unsupported rule branches exit with a diagnostic on stderr.
+
+Each input quantity, unit price and monetary amount is limited to 1,000,000,000 to keep decimal products exact. Larger values return an unsupported-input error.
 
 ## Check a change
 

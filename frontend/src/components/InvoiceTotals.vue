@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { InvoiceResult } from '../api'
 import SourceTag from './SourceTag.vue'
+import { formatMoney } from '../money'
 
 defineProps<{
   totals: InvoiceResult['totals']
@@ -16,7 +17,8 @@ defineProps<{
         <dt>Net subtotal</dt>
         <dd>
           <strong class="number"
-            >{{ totals.calculated_subtotal }} {{ currency }}</strong
+            >{{ formatMoney(totals.calculated_subtotal) }}
+            {{ currency }}</strong
           >
           <SourceTag source="calculated" />
         </dd>
@@ -25,7 +27,8 @@ defineProps<{
         <dt>Tax</dt>
         <dd>
           <strong class="number"
-            >{{ totals.calculated_tax_total }} {{ currency }}</strong
+            >{{ formatMoney(totals.calculated_tax_total) }}
+            {{ currency }}</strong
           >
           <SourceTag source="calculated" />
         </dd>
@@ -34,7 +37,7 @@ defineProps<{
         <dt>Invoice total</dt>
         <dd>
           <strong class="number"
-            >{{ totals.calculated_total }} {{ currency }}</strong
+            >{{ formatMoney(totals.calculated_total) }} {{ currency }}</strong
           >
           <SourceTag source="calculated" />
         </dd>

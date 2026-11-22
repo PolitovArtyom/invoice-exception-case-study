@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { listCases, type CaseSummary } from '../api'
 import DecisionTag from '../components/DecisionTag.vue'
 import SourceTag from '../components/SourceTag.vue'
+import { formatMoney } from '../money'
 
 const router = useRouter()
 const cases = ref<CaseSummary[] | null>(null)
@@ -58,14 +59,17 @@ onMounted(async () => {
             <td class="align-right amount-cell">
               <template v-if="item.declared_total !== null">
                 <span class="number"
-                  >{{ item.declared_total }} {{ item.currency }}</span
+                  >{{ formatMoney(item.declared_total) }}
+                  {{ item.currency }}</span
                 >
                 <small><SourceTag source="invoice" /></small>
               </template>
               <template v-else>—</template>
             </td>
             <td><DecisionTag :decision="item.decision" /></td>
-            <td>{{ item.stage }}</td>
+            <td>
+              {{ item.reading_origin === null ? 'Not read yet' : item.stage }}
+            </td>
           </tr>
         </tbody>
       </table>

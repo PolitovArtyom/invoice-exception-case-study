@@ -6,6 +6,7 @@ import ChecksTable from '../components/ChecksTable.vue'
 import DecisionTag from '../components/DecisionTag.vue'
 import InvoiceTotals from '../components/InvoiceTotals.vue'
 import SourceTag from '../components/SourceTag.vue'
+import { formatMoney } from '../money'
 
 const props = defineProps<{ caseId: string }>()
 const view = ref<CaseView | null>(null)
@@ -72,7 +73,7 @@ onMounted(async () => {
       <div class="invoice-decision">
         <p v-if="facts" class="declared">
           <span class="number"
-            >{{ facts.declared_total }} {{ facts.currency }}</span
+            >{{ formatMoney(facts.declared_total) }} {{ facts.currency }}</span
           >
           <SourceTag source="invoice" />
         </p>
@@ -100,8 +101,6 @@ onMounted(async () => {
       <InvoiceTotals :totals="result.totals" :currency="facts?.currency" />
       <ChecksTable :checks="result.checks" />
     </template>
-    <p v-else class="waiting-note">
-      Register facts through MCP to see the assessment.
-    </p>
+    <p v-else class="waiting-note">The agent has not read this invoice yet.</p>
   </template>
 </template>

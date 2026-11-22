@@ -55,8 +55,11 @@ public sealed class InvoiceTools(CaseQueries queries, CaseUpdates updates, CaseF
         queries.ReadCompanyData(case_id) ?? throw UnknownCase(), logger);
 
     [McpServerTool(Name = "register_invoice"), Description("Save facts read from the selected PDF and return the calculated assessment.")]
-    public CallToolResult RegisterInvoice(string case_id, PdfSelection source, JsonElement facts) => ToolResponse.Run(() =>
+    public CallToolResult RegisterInvoice(string case_id, PdfSelection? source, JsonElement facts) => ToolResponse.Run(() =>
     {
+        if (source is null)
+            throw new InvoiceValidationException("/source", "Select a PDF from open_case.");
+
         var view = RequireCase(case_id);
         var reading = IntakeValidation.ReadFacts(JsonNode.Parse(facts.GetRawText()), "/facts");
         var pdf = folders.ReadSource(view.Case, source.Root, source.RelativePath, reading.DocumentId);

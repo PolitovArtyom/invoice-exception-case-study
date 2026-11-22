@@ -62,7 +62,13 @@ public sealed class StartupLoadingTests
         Assert.Null(pending["revision"]!["result"]);
         var opened = Payload(await Call(mcp, "open_case", "case-911"));
         Assert.Null(opened["current_document_id"]);
-        Assert.False(opened["sources"]![0]!["available"]!.GetValue<bool>());
+        var source = Assert.Single(opened["sources"]!.AsArray())!;
+        Assert.True(source["available"]!.GetValue<bool>());
+        Assert.Equal("own", source["root"]!.GetValue<string>());
+        Assert.Equal("scenarios/cases/case-911/documents/document-001.pdf", source["host_path"]!.GetValue<string>());
+        Assert.Equal(Path.Combine(environment.ScenarioPath, "cases", "case-911", "documents", "document-001.pdf"),
+            source["container_path"]!.GetValue<string>());
+        Assert.Equal("CTX-001-v1", pending["revision"]!["context_version"]!.GetValue<string>());
         Assert.DoesNotContain("REVIEWER-FACTS-MUST-NOT-LOAD", opened.ToJsonString(), StringComparison.Ordinal);
         Assert.DoesNotContain("EXPECTED DATA MUST NOT BE READ", opened.ToJsonString(), StringComparison.Ordinal);
     }

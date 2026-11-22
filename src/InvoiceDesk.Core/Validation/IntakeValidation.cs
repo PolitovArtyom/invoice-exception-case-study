@@ -3,11 +3,14 @@ using System.Text.Json.Nodes;
 
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Rules;
 
 namespace InvoiceDesk.Core.Validation;
 
 public static class IntakeValidation
 {
+    private const decimal MaximumSupportedMagnitude = 1_000_000_000m;
+
     private static readonly HashSet<string> DecimalFields =
     [
         "quantity", "accepted_quantity", "unit_net_price", "tax_rate", "declared_net_amount",
@@ -46,7 +49,10 @@ public static class IntakeValidation
         {
             if (evidence.DocumentId != facts.DocumentId)
                 throw new InvoiceValidationException($"{prefix}/evidence/{index}/document_id", "Must reference this invoice document.");
-            if (!JsonFields.TryResolve(json, evidence.FieldPath, out var value) || value is not JsonValue)
+            string fieldPath = evidence.FieldPath;
+            if (fieldPath.StartsWith("/evidence/", StringComparison.Ordinal) ||
+                fieldPath.StartsWith("/missing_fields/", StringComparison.Ordinal) ||
+                !JsonFields.TryResolve(json, fieldPath, out var value) || value is not JsonValue)
                 throw new InvoiceValidationException($"{prefix}/evidence/{index}/field_path", "Must reference a printed invoice field.");
         }
 
@@ -101,7 +107,10 @@ public static class IntakeValidation
         string fraction = parts.Length == 2 ? parts[1].TrimEnd('0') : "";
         string canonical = (whole.Length == 0 ? "0" : whole) + (fraction.Length == 0 ? "" : "." + fraction);
         if (!decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value) ||
-            value.ToString("0.############################", CultureInfo.InvariantCulture) != canonical)
+            value > MaximumSupportedMagnitude)
+            throw new UnsupportedInvoiceCaseException($"amount or quantity above {MaximumSupportedMagnitude.ToString(CultureInfo.InvariantCulture)} at {path}");
+
+        if (value.ToString("0.############################", CultureInfo.InvariantCulture) != canonical)
             throw new InvoiceValidationException(path, "Decimal value is outside the supported exact representation.");
     }
 

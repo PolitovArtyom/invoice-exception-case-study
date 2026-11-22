@@ -24,10 +24,13 @@ internal static class InvoiceApiClient
         client.CallToolAsync(tool, new Dictionary<string, object?> { ["case_id"] = caseId });
 
     public static ValueTask<CallToolResult> Register(McpClient client, JsonNode facts) =>
+        Register(client, facts, new { root = "public", relative_path = "cases/case-001/documents/document-001.pdf" });
+
+    public static ValueTask<CallToolResult> Register(McpClient client, JsonNode facts, object? source) =>
         client.CallToolAsync("register_invoice", new Dictionary<string, object?>
         {
             ["case_id"] = PublicCases.CleanCase,
-            ["source"] = new { root = "public", relative_path = "cases/case-001/documents/document-001.pdf" },
+            ["source"] = source,
             ["facts"] = facts
         });
 

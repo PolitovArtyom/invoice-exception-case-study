@@ -60,6 +60,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
         await using var mcp = await ConnectMcp(app);
         using var page = app.CreateClient();
 
+        var company = Payload(await Call(mcp, "get_company_data"));
         var facts = PublicCases.CleanFacts();
         var registered = Payload(await Register(mcp, facts));
         CleanAssessment.AssertResult(registered["result"]!, 2);
@@ -68,6 +69,27 @@ public sealed class InvoiceRegistrationTests : IDisposable
 
         var detail = await Read(page, CaseUrl);
         var revision = detail["revision"]!;
+        Assert.Equal(2, detail["current_revision"]!.GetValue<int>());
+        Assert.Equal(2, revision["number"]!.GetValue<int>());
+        Assert.Equal("2", revision["assessment_id"]!.GetValue<string>());
+        Assert.Equal("CTX-001-v1", revision["context_version"]!.GetValue<string>());
+        Assert.Equal("CTX-001-v1", company["context_version"]!.GetValue<string>());
+        AssertSameJson(company, Payload(await Call(mcp, "get_company_data")));
+
+        var history = await Read(page, $"{CaseUrl}/history");
+        Assert.Collection(history.AsArray(),
+            saved =>
+            {
+                AssertSameJson(revision, saved);
+                Assert.Equal("register_invoice", saved!["action"]!["kind"]!.GetValue<string>());
+                Assert.Equal("agent", saved["action"]!["actor"]!.GetValue<string>());
+            },
+            initial =>
+            {
+                Assert.Equal(1, initial!["number"]!.GetValue<int>());
+                Assert.Null(initial["assessment_id"]);
+            });
+
         var document = revision["document"]!;
         Assert.Equal("read by the agent", document["reading_origin"]!.GetValue<string>());
         Assert.Equal("09e11592605b5a234e9e2e3df698972f3fd3e8569c6175701676d832b6f83837",
@@ -147,6 +169,38 @@ public sealed class InvoiceRegistrationTests : IDisposable
         AssertSameJson(initial, await Read(page, CaseUrl));
         AssertSameJson(history, await Read(page, $"{CaseUrl}/history"));
         AssertSameJson(company, Payload(await Call(mcp, "get_company_data")));
+    }
+
+    [Fact]
+    public async Task Should_reject_evidence_when_it_points_to_itself()
+    {
+        await using var app = _environment.Start();
+        _environment.PrepareCleanCase(app);
+        await using var mcp = await ConnectMcp(app);
+        var history = Payload(await Call(mcp, "get_case_history"));
+        var facts = PublicCases.CleanFacts();
+        facts["evidence"]![0]!["field_path"] = "/evidence/0/excerpt";
+
+        var error = Payload(await Register(mcp, facts), isError: true)["error"]!;
+
+        Assert.Equal("VALIDATION_ERROR", error["code"]!.GetValue<string>());
+        Assert.Equal("/facts/evidence/0/field_path", Assert.Single(error["details"]!.AsArray())!["path"]!.GetValue<string>());
+        AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
+    }
+
+    [Fact]
+    public async Task Should_return_a_source_validation_error_when_the_mcp_source_is_null()
+    {
+        await using var app = _environment.Start();
+        _environment.PrepareCleanCase(app);
+        await using var mcp = await ConnectMcp(app);
+        var history = Payload(await Call(mcp, "get_case_history"));
+
+        var error = Payload(await Register(mcp, PublicCases.CleanFacts(), source: null), isError: true)["error"]!;
+
+        Assert.Equal("VALIDATION_ERROR", error["code"]!.GetValue<string>());
+        Assert.Equal("/source", Assert.Single(error["details"]!.AsArray())!["path"]!.GetValue<string>());
+        AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
     }
 
     [Fact]

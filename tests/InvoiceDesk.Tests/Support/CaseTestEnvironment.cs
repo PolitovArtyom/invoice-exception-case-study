@@ -40,8 +40,12 @@ internal sealed class CaseTestEnvironment : IDisposable
         string folder = Path.Combine(ScenarioPath, "cases", reviewerCaseId);
         Directory.CreateDirectory(Path.Combine(folder, "steps"));
         Directory.CreateDirectory(Path.Combine(folder, "expected"));
-        string original = Path.Combine(PublicCases.Folder(PublicCases.CleanCase), "case.json");
-        var manifest = JsonNode.Parse(File.ReadAllText(original))!;
+        string original = PublicCases.Folder(PublicCases.CleanCase);
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(original, "case.json")))!;
+        string pdfPath = manifest["input_documents"]![0]!["path"]!.GetValue<string>();
+        string destination = Path.Combine(folder, pdfPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(Path.Combine(original, pdfPath), destination);
         manifest["case_id"] = reviewerCaseId;
         File.WriteAllText(Path.Combine(folder, "case.json"), manifest.ToJsonString());
         var firstStep = PublicCases.ReadFirstStep();
