@@ -10,13 +10,25 @@ public sealed class StartupLoadingTests
     public async Task Should_register_only_allow_listed_facts_when_a_fresh_app_starts()
     {
         using var environment = new CaseTestEnvironment();
-        environment.CopyCase(PublicCases.CleanCase);
+        string cleanFolder = environment.CopyCase(PublicCases.CleanCase);
         environment.CopyCase("case-002");
         environment.CopyCase("case-004");
         environment.CopyCase("case-010");
-        await using var app = environment.Start(loadCasesOnStartup: true);
-        using var page = app.CreateClient();
+        await using (var app = environment.Start(loadCasesOnStartup: true))
+        {
+            using var page = app.CreateClient();
 
+            await AssertStartupCases(page);
+        }
+
+        File.WriteAllText(Path.Combine(cleanFolder, "case.json"), "Existing case must be skipped.");
+        await using var restarted = environment.Start(loadCasesOnStartup: true);
+        using var restartedPage = restarted.CreateClient();
+        await AssertStartupCases(restartedPage);
+    }
+
+    private static async Task AssertStartupCases(HttpClient page)
+    {
         var list = (await Read(page, "/api/cases")).AsArray();
         Assert.Equal(new[] { "case-001", "case-002", "case-004", "case-010" },
             list.Select(row => row!["case_id"]!.GetValue<string>()));

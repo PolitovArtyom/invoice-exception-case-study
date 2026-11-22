@@ -108,7 +108,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
             history = await Read(page, $"{CaseUrl}/history");
         }
 
-        await using var restarted = _environment.Start(loadCasesOnStartup: true);
+        await using var restarted = _environment.Start();
         await using var restartedMcp = await ConnectMcp(restarted);
         using var restartedPage = restarted.CreateClient();
         var assessment = Payload(await Call(restartedMcp, "get_assessment"));
