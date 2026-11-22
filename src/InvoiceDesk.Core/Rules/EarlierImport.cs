@@ -3,4 +3,4 @@ using InvoiceDesk.Core.Model.CompanyData;
 
 namespace InvoiceDesk.Core.Rules;
 
-internal sealed record EarlierInvoice(InvoiceFacts Facts, CompanyData CompanyData);
+internal sealed record EarlierImport(InvoiceFacts Facts, CompanyData CompanyData);

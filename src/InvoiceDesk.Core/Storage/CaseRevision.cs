@@ -1,3 +1,4 @@
+using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Storage;
@@ -20,5 +21,3 @@ internal sealed class CaseRevision
 
     public InvoiceResult? Result { get; init; }
 }
-
-public sealed record RevisionAction(string Kind, string Actor, DateTimeOffset RecordedAt);

@@ -108,7 +108,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
         );
 
         var document = revision["document"]!;
-        Assert.Equal("read by the agent", document["reading_origin"]!.GetValue<string>());
+        Assert.Equal("agent", document["reading_origin"]!.GetValue<string>());
         Assert.Equal(
             "09e11592605b5a234e9e2e3df698972f3fd3e8569c6175701676d832b6f83837",
             document["content_sha256"]!.GetValue<string>()
@@ -230,6 +230,39 @@ public sealed class InvoiceRegistrationTests : IDisposable
         var detail = Assert.Single(error["details"]!.AsArray())!;
         Assert.Equal(fieldPath, detail["path"]!.GetValue<string>());
         Assert.Contains("calendar date", detail["message"]!.GetValue<string>());
+        AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
+    }
+
+    [Fact]
+    public async Task Should_require_a_missing_reason_and_reject_a_quote_when_an_agent_leaves_iban_null()
+    {
+        await using var app = _environment.Start();
+        await using var mcp = await ConnectMcp(app);
+        var history = Payload(await Call(mcp, "get_case_history"));
+        var facts = PublicCases.CleanFacts();
+        facts["bank"]!["iban"] = null;
+
+        var missingReason = Payload(await Register(mcp, facts), isError: true)["error"]!;
+        Assert.Equal("VALIDATION_ERROR", missingReason["code"]!.GetValue<string>());
+        Assert.Equal(
+            "/facts/bank/iban",
+            Assert.Single(missingReason["details"]!.AsArray())!["path"]!.GetValue<string>()
+        );
+
+        facts["missing_fields"]!
+            .AsArray()
+            .Add(new JsonObject { ["field_path"] = "/bank/iban", ["reason"] = "illegible" });
+        int evidenceIndex = facts["evidence"]!
+            .AsArray()
+            .Select((item, index) => (Path: item!["field_path"]!.GetValue<string>(), Index: index))
+            .Single(item => item.Path == "/bank/iban")
+            .Index;
+        var nullQuote = Payload(await Register(mcp, facts), isError: true)["error"]!;
+        Assert.Equal("VALIDATION_ERROR", nullQuote["code"]!.GetValue<string>());
+        Assert.Equal(
+            $"/facts/evidence/{evidenceIndex}/field_path",
+            Assert.Single(nullQuote["details"]!.AsArray())!["path"]!.GetValue<string>()
+        );
         AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
     }
 

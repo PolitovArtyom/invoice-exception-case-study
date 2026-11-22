@@ -55,11 +55,20 @@ internal static class ValidationErrors
             }
         }
 
-        foreach (var child in result.Details ?? [])
+        var children = result.Details ?? [];
+        string alternativesPath = $"{result.EvaluationPath}/anyOf/";
+        bool hasValidAlternative = children.Any(child => child.IsValid && IsAlternative(child));
+        foreach (var child in children)
         {
+            if (hasValidAlternative && IsAlternative(child))
+                continue;
+
             foreach (var detail in Read(child, json, prefix))
                 yield return detail;
         }
+
+        bool IsAlternative(EvaluationResults child) =>
+            child.EvaluationPath.ToString().StartsWith(alternativesPath, StringComparison.Ordinal);
     }
 
     private static IEnumerable<string> RequiredNames(string message) =>

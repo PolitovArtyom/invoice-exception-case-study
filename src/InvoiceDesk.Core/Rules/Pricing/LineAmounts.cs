@@ -11,6 +11,19 @@ internal sealed record LineAmounts(decimal Net, decimal Tax)
         return new(net, tax);
     }
 
+    public static LineAmounts Sum(IEnumerable<LineAmounts> lines)
+    {
+        decimal subtotal = 0;
+        decimal tax = 0;
+        foreach (var line in lines)
+        {
+            subtotal += line.Net;
+            tax += line.Tax;
+        }
+
+        return new(subtotal, tax);
+    }
+
     private static decimal RoundMoney(decimal value) =>
         decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 }

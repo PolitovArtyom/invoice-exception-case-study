@@ -20,7 +20,15 @@ public sealed class CaseService(
             return false;
 
         var invoiceCase = InvoiceCase.FromMetadata(metadata);
-        Apply(invoiceCase, null, companyData, fixture, null, "load_case", "trusted_loader");
+        Apply(
+            invoiceCase,
+            null,
+            companyData,
+            fixture,
+            null,
+            RevisionKind.LoadCase,
+            RevisionActor.TrustedLoader
+        );
         transaction.Commit();
         return true;
     }
@@ -37,8 +45,8 @@ public sealed class CaseService(
             null,
             reading,
             null,
-            "register_invoice",
-            "agent"
+            RevisionKind.RegisterInvoice,
+            RevisionActor.Agent
         );
         transaction.Commit();
         return Response(revision.Number, revision.Result!, false);
@@ -74,8 +82,8 @@ public sealed class CaseService(
             companyData,
             reading,
             step,
-            "submit_case_inputs",
-            "runner"
+            RevisionKind.SubmitCaseInputs,
+            RevisionActor.Runner
         );
         transaction.Commit();
         return revision.Result!;
@@ -153,7 +161,7 @@ public sealed class CaseService(
         var document = revision.Document;
         return new(
             revision.Number,
-            revision.Snapshot.ContextVersion,
+            revision.Snapshot.Data.ContextVersion,
             revision.Action,
             document is null
                 ? null
@@ -181,19 +189,18 @@ public sealed class CaseService(
             facts?.DeclaredTotal,
             facts?.Currency,
             decision,
-            Stage(revision),
-            revision.Document?.ReadingOrigin
+            Stage(revision)
         );
     }
 
-    private static string Stage(CaseRevision revision)
+    private static CaseStage Stage(CaseRevision revision)
     {
         if (revision.Document is null)
-            return "not_read";
+            return CaseStage.NotRead;
 
         return revision.Result?.Decision == Decision.Clear
-            ? "ready_for_accounting"
-            : "needs_attention";
+            ? CaseStage.ReadyForAccounting
+            : CaseStage.NeedsAttention;
     }
 
     private CaseRevision Apply(
@@ -202,8 +209,8 @@ public sealed class CaseService(
         CompanyData? companyData,
         InvoiceReading? reading,
         int? step,
-        string kind,
-        string actor
+        RevisionKind kind,
+        RevisionActor actor
     )
     {
         var inputs = ResolveInputs(invoiceCase, current, companyData, reading);
@@ -229,12 +236,7 @@ public sealed class CaseService(
         int number = invoiceCase.CurrentRevision + 1;
         var snapshot = companyData is null
             ? current!.Snapshot
-            : new CompanyDataSnapshot
-            {
-                CaseId = invoiceCase.Id,
-                ContextVersion = companyData.ContextVersion,
-                Data = companyData,
-            };
+            : new CompanyDataSnapshot { CaseId = invoiceCase.Id, Data = companyData };
         var document = reading is null
             ? current?.Document
             : new InvoiceDocument

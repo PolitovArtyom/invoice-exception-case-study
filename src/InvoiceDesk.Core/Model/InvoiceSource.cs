@@ -1,7 +1,7 @@
 namespace InvoiceDesk.Core.Model;
 
 public sealed record InvoiceSource(
-    string Root,
+    SourceRoot Root,
     string RelativePath,
     string ContentSha256,
     string DocumentId
@@ -11,8 +11,18 @@ public sealed record InvoiceReading(
     InvoiceFacts Facts,
     string ContentSha256,
     InvoiceSource? Source,
-    string ReadingOrigin
-)
+    ReadingOrigin ReadingOrigin
+);
+
+public enum SourceRoot
 {
-    public const string FixtureReadingOrigin = "loaded from test data, not read by the agent";
+    Public,
+    Own,
+}
+
+public enum ReadingOrigin
+{
+    Fixture,
+    Agent,
+    Runner,
 }

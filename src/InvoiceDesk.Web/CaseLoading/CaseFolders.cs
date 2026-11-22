@@ -15,10 +15,10 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
             ?? Path.Combine(environment.ContentRootPath, "../../scenarios")
     );
 
-    public IEnumerable<string> CaseDirectories(string root)
+    public IEnumerable<string> CaseDirectories(SourceRoot root)
     {
         string parent = Path.Combine(GetRoot(root), "cases");
-        if (root == "own" && !Directory.Exists(parent))
+        if (root == SourceRoot.Own && !Directory.Exists(parent))
             return [];
 
         return Directory.EnumerateDirectories(parent).Order(StringComparer.Ordinal);
@@ -28,11 +28,11 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
         FindFile(GetRoot(source.Root), source.RelativePath);
 
     public static string HostPath(InvoiceSource source) =>
-        (source.Root == "public" ? "dataset/" : "scenarios/") + source.RelativePath;
+        (source.Root == SourceRoot.Public ? "dataset/" : "scenarios/") + source.RelativePath;
 
     public InvoiceSource ReadSource(
         CaseMetadata metadata,
-        string root,
+        SourceRoot root,
         string relativePath,
         string documentId
     )
@@ -62,11 +62,11 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
         return File.Exists(path) ? path : null;
     }
 
-    private string GetRoot(string root) =>
+    private string GetRoot(SourceRoot root) =>
         root switch
         {
-            "public" => _publicRoot,
-            "own" => _ownRoot,
-            _ => throw new ArgumentException("Unknown source root.", nameof(root)),
+            SourceRoot.Public => _publicRoot,
+            SourceRoot.Own => _ownRoot,
+            _ => throw new ArgumentOutOfRangeException(nameof(root)),
         };
 }

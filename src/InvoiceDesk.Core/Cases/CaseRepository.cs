@@ -1,3 +1,4 @@
+using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Storage;
@@ -47,7 +48,7 @@ public sealed class CaseRepository(InvoiceDatabase database)
             .OrderByDescending(row => row.Number)
             .ToArray();
 
-    internal EarlierInvoice[] ReadEarlierImports(string caseId, long? exceptDocumentId) =>
+    internal EarlierImport[] ReadEarlierImports(string caseId, long? exceptDocumentId) =>
         database
             .Revisions.AsNoTracking()
             .Where(row =>
@@ -57,7 +58,7 @@ public sealed class CaseRepository(InvoiceDatabase database)
                 && row.DocumentId != exceptDocumentId
             )
             .OrderBy(row => row.Number)
-            .Select(row => new EarlierInvoice(row.Document!.Facts, row.Snapshot.Data))
+            .Select(row => new EarlierImport(row.Document!.Facts, row.Snapshot.Data))
             .ToArray();
 
     internal CaseRevision Append(

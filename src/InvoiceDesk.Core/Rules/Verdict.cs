@@ -30,8 +30,8 @@ internal sealed record Verdict
     public static Verdict Fail(Severity severity, Comparison comparison) =>
         new(CheckStatus.Fail, comparison, severity);
 
-    public static Verdict MissingFact(RequiredFact requiredFact) =>
-        new(CheckStatus.Unknown, requiredFact: requiredFact);
+    public static Verdict MissingFact(RequiredFact requiredFact, Comparison? comparison = null) =>
+        new(CheckStatus.Unknown, comparison, requiredFact: requiredFact);
 
     public static Verdict DependsOn(CheckCode code) => new(CheckStatus.Unknown, dependency: code);
 

@@ -20,6 +20,36 @@ public sealed class InvoiceDecisionTests
         Assert.Equal(Decision.Clear, InvoiceDecision.From([passed, notApplicable]));
     }
 
+    [Fact]
+    public void Should_ask_once_per_root_object_when_checked_lines_need_the_same_fact()
+    {
+        var questions = InvoiceQuestions.From([
+            ("L1", Verdict.MissingFact(RequiredFact.GoodsReceipts)),
+            ("L2", Verdict.MissingFact(RequiredFact.GoodsReceipts)),
+            ("L3", Verdict.DependsOn(CheckCode.OrderMatch)),
+            ("D", Verdict.MissingFact(RequiredFact.BankAccount)),
+        ]);
+
+        Assert.Collection(
+            questions,
+            first =>
+            {
+                Assert.Equal(RequiredFact.GoodsReceipts, first.RequiredFact);
+                Assert.Equal("L1", Assert.Single(first.TargetObjectIds));
+            },
+            second =>
+            {
+                Assert.Equal(RequiredFact.GoodsReceipts, second.RequiredFact);
+                Assert.Equal("L2", Assert.Single(second.TargetObjectIds));
+            },
+            bank =>
+            {
+                Assert.Equal(RequiredFact.BankAccount, bank.RequiredFact);
+                Assert.Equal("D", Assert.Single(bank.TargetObjectIds));
+            }
+        );
+    }
+
     private static CheckResult CreateCheck(CheckStatus status, Severity? severity = null) =>
         new(CheckCode.BankAccount, "DOC", status, severity, null, [], []);
 }

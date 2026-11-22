@@ -8,7 +8,5 @@ internal sealed class CompanyDataSnapshot
 
     public required string CaseId { get; init; }
 
-    public required string ContextVersion { get; init; }
-
     public required CompanyData Data { get; init; }
 }

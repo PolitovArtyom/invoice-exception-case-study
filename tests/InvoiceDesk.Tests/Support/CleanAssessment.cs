@@ -110,11 +110,11 @@ internal static class CleanAssessment
         AssertSources("CURRENCY_MATCH", "DOC-001", "order", checks, "currency");
         AssertSources("SUPPLIER_IDENTITY", "DOC-001", "order", checks, "supplier_id");
         AssertSources("BUYER_IDENTITY", "DOC-001", "order", checks, "buyer_id");
-        AssertSources("SUPPLIER_IDENTITY", "DOC-001", "company_data", checks, "registration_id");
+        AssertSources("SUPPLIER_IDENTITY", "DOC-001", "directory", checks, "registration_id");
         AssertSources(
             "BUYER_IDENTITY",
             "DOC-001",
-            "company_data",
+            "directory",
             checks,
             "legal_name",
             "registration_id",

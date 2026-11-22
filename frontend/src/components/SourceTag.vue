@@ -3,7 +3,7 @@ defineProps<{ source: string }>()
 
 const labels: Record<string, string> = {
   invoice: 'Invoice',
-  company_data: 'Company data',
+  directory: 'Directory',
   order: 'Order',
   receipts: 'Receipts',
   history: 'History',

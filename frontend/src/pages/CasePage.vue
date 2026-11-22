@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { documentPdf, getCase, type CaseView } from '../api'
+import { documentPdf, getCase, type CaseView, type ReadingOrigin } from '../api'
 import ChecksTable from '../components/ChecksTable.vue'
 import DecisionTag from '../components/DecisionTag.vue'
+import InvoiceLineCard from '../components/InvoiceLineCard.vue'
+import NeedsAttention from '../components/NeedsAttention.vue'
 import InvoiceTotals from '../components/InvoiceTotals.vue'
 import SourceTag from '../components/SourceTag.vue'
+import { isLineCheck } from '../checkPresentation'
 import { caseStageLabel } from '../caseStage'
 import { formatDecimal } from '../formatDecimal'
+
+const readingOriginLabels: Record<ReadingOrigin, string> = {
+  fixture: 'loaded from test data, not read by the agent',
+  agent: 'read by the agent',
+  runner: 'loaded by the runner',
+}
 
 const props = defineProps<{ caseId: string }>()
 const view = ref<CaseView | null>(null)
@@ -16,6 +25,21 @@ const document = computed(() => view.value?.revision.document)
 const facts = computed(() => document.value?.facts)
 const result = computed(() => view.value?.revision.result)
 
+const totalsCheck = computed(() =>
+  result.value?.checks.find((check) => check.code === 'TOTALS_ARITHMETIC'),
+)
+const lineCards = computed(() =>
+  (facts.value?.lines ?? []).flatMap((line) => {
+    const assessment = result.value?.lines.find(
+      (item) => item.document_line_id === line.line_id,
+    )
+    if (!assessment) return []
+    const checks = (result.value?.checks ?? []).filter(
+      (check) => check.object_id === line.line_id && isLineCheck(check),
+    )
+    return [{ line, assessment, checks }]
+  }),
+)
 onMounted(async () => {
   try {
     view.value = await getCase(props.caseId)
@@ -89,7 +113,9 @@ onMounted(async () => {
           >Revision {{ view.revision.number }} ·
           <span class="mono">{{ view.revision.context_version }}</span></span
         >
-        <span v-if="document">{{ document.reading_origin }}</span>
+        <span v-if="document">{{
+          readingOriginLabels[document.reading_origin]
+        }}</span>
         <a
           v-if="document?.source"
           :href="documentPdf(caseId, document.reference)"
@@ -99,9 +125,33 @@ onMounted(async () => {
         >
       </div>
     </section>
-    <template v-if="result">
-      <InvoiceTotals :totals="result.totals" :currency="facts?.currency" />
-      <ChecksTable :checks="result.checks" />
+    <template v-if="result && facts">
+      <NeedsAttention
+        :checks="result.checks"
+        :lines="facts.lines"
+        :currency="facts.currency"
+      />
+      <section
+        v-if="lineCards.length"
+        class="invoice-lines"
+        aria-labelledby="invoice-lines-heading"
+      >
+        <h2 id="invoice-lines-heading">Invoice lines</h2>
+        <InvoiceLineCard
+          v-for="{ line, assessment, checks } in lineCards"
+          :key="line.line_id"
+          :line="line"
+          :assessment="assessment"
+          :checks="checks"
+          :facts="facts"
+        />
+      </section>
+      <InvoiceTotals
+        v-if="totalsCheck"
+        :currency="facts.currency"
+        :check="totalsCheck"
+      />
+      <ChecksTable :checks="result.checks" :facts="facts" />
       <details v-if="facts?.evidence.length" class="card">
         <summary>Invoice evidence</summary>
         <dl class="operands">

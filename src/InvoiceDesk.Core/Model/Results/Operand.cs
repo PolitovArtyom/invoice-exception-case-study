@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace InvoiceDesk.Core.Model.Results;
 
 public sealed record Operand(string Name, object? Value, OperandSource Source)
@@ -33,7 +31,6 @@ public enum OperandSource
     Receipts,
     History,
 
-    [JsonStringEnumMemberName("company_data")]
     Directory,
     Calculated,
     Policy,

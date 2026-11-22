@@ -45,7 +45,7 @@ internal sealed class DocumentConflictCheck : IDocumentCheck
         );
     }
 
-    private static bool Matches(EarlierInvoice invoice, InvoiceBusinessKey key) =>
+    private static bool Matches(EarlierImport invoice, InvoiceBusinessKey key) =>
         InvoiceText.Identifier(invoice.Facts.Number) == key.Number
         && InvoiceMatches.FindSupplier(invoice.Facts, invoice.CompanyData)?.SupplierId
             == key.SupplierId

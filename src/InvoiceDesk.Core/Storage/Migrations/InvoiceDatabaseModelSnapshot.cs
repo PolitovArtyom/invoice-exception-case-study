@@ -56,10 +56,6 @@ namespace InvoiceDesk.Core.Storage.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ContextVersion")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Data")
                         .IsRequired()
                         .HasColumnType("TEXT");

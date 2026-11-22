@@ -1,13 +1,12 @@
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.Results;
-using InvoiceDesk.Core.Storage;
 
 namespace InvoiceDesk.Core.Cases;
 
 public sealed record CaseView(
     CaseMetadata Case,
     int CurrentRevision,
-    string Stage,
+    CaseStage Stage,
     RevisionView Revision
 );
 
@@ -25,19 +24,18 @@ public sealed record DocumentView(
     string ContentSha256,
     InvoiceSource? Source,
     InvoiceFacts Facts,
-    string ReadingOrigin
+    ReadingOrigin ReadingOrigin
 );
 
 public sealed record CaseSummary(
     string CaseId,
-    string Origin,
+    CaseOrigin Origin,
     string? Number,
     string? Supplier,
     decimal? DeclaredTotal,
     string? Currency,
     Decision? Decision,
-    string Stage,
-    string? ReadingOrigin
+    CaseStage Stage
 );
 
 public sealed record AssessmentResponse(
@@ -45,3 +43,10 @@ public sealed record AssessmentResponse(
     InvoiceResult Result,
     bool InputsUnchanged
 );
+
+public enum CaseStage
+{
+    NotRead,
+    NeedsAttention,
+    ReadyForAccounting,
+}

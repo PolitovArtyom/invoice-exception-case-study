@@ -11,6 +11,6 @@
 | 06 Human resolution | Acceptance, reading correction and scenario 102. | All ten |
 | 07 Final delivery | Clean-clone verification, rule-change rehearsal and submission. | All ten |
 
-Stage 00 delivers the passing branches for an explicit order with uncontested lines, a real persistence and API harness, and CI for the listed runner subset. Cases outside the allow-list begin with company data and source metadata. Supplier-issued corrected invoice scenario 103 is part of the simulated prototype.
+Stage 01 delivers quantity, pricing, arithmetic and bank assessments for matched invoices and displays their saved operands and verdicts. The MCP API tests cover missing facts, price tolerance, rounding, exact totals, signed balances and the case 004 and 005 regressions. The official runner gates cases 001, 002, 003, 004, 005 and 007. Cases outside the startup allow-list begin with company data and source metadata. Supplier-issued corrected invoice scenario 103 is part of the simulated prototype.
 
 Every stage builds and runs the accumulated API and runner gates. GitHub Actions retains the public runner report. Workspace QA and reviews precede integration.
