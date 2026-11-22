@@ -1,0 +1,15 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/InvoiceDesk.Adapter/InvoiceDesk.Adapter.csproj" />
+    <Project Path="src/InvoiceDesk.Core/InvoiceDesk.Core.csproj" />
+    <Project Path="src/InvoiceDesk.Web/InvoiceDesk.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/InvoiceDesk.Tests/InvoiceDesk.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,10 @@
+.git
+.venv
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/wwwroot
+**/TestResults
+**/*.sqlite*
+results

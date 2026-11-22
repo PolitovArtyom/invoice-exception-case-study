@@ -1,0 +1,23 @@
+name: invoice-desk
+services:
+  app:
+    image: invoice-desk:local
+    build: .
+    ports:
+      - "127.0.0.1:${INVOICE_PORT:-8080}:8080"
+    environment:
+      DatabasePath: /data/invoice.sqlite
+      DatasetPath: /dataset
+      ScenarioPath: /scenarios
+    volumes:
+      - invoice-data:/data
+      - ./dataset:/dataset:ro
+      - ./scenarios:/scenarios:ro
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "2", http://127.0.0.1:8080/health]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+volumes:
+  invoice-data:

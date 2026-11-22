@@ -1,3 +1,80 @@
+# Invoice Desk
+
+Invoice Desk checks an invoice against a saved company-data snapshot and shows the decision and its supporting calculations. An agent reads the PDF and submits printed facts with evidence. The application evaluates those facts using the assignment's `core-v1` rules.
+
+| Scope | Stage 00 |
+| --- | --- |
+| Built | Case 001 from PDF source references through MCP fact registration, all 27 passing checks, SQLite history, case list and detail, and native runner replay. |
+| Described | [Remaining stages](docs/plan.md), [architecture](docs/architecture.md), and the [assignment](#invoice-exception-agent). |
+| Prototype | [Simulated product vision](submission/prototype/), including the unbuilt case 103. |
+
+## Run the workspace
+
+Install Docker with the Compose plugin. From the repository root:
+
+```sh
+docker compose up --build --wait
+```
+
+Open the case list at `http://127.0.0.1:8080/` and the clean invoice at `http://127.0.0.1:8080/cases/case-001`. Compose waits for `/health`, which becomes available after migrations and case loading. Set `INVOICE_PORT` to change the loopback port.
+
+Case 001 starts with its first-step facts and carries the label “loaded from test data, not read by the agent”. Other discovered cases have company data and PDF references. To exercise a fresh registration, add a clean invoice under a new case ID in `scenarios/cases`, then restart Web and register the facts against that case. Re-importing the preloaded invoice exercises the duplicate branch scheduled for stage 02.
+
+The database is in the Compose `invoice-data` volume. `docker compose down` stops the app and preserves history. Use `docker compose down --volumes` to reset this project's volume. Case folders under `dataset/cases` and `scenarios/cases` are mounted read-only. The startup loader discovers new cases on restart and preserves existing cases. Own case folders use the assignment's case metadata and first-step layout.
+
+### Connect an agent
+
+The Streamable HTTP MCP endpoint is `http://127.0.0.1:8080/mcp`. For example, configure a Claude Code project connection with:
+
+```json
+{
+  "mcpServers": {
+    "invoice": { "type": "http", "url": "http://127.0.0.1:8080/mcp" }
+  }
+}
+```
+
+`open_case` returns source references and the extraction schema. The agent can resolve `host_path` from the repository root. `container_path` is the application's path inside Docker. `register_invoice` accepts the case ID, a source with `root` and `relative_path`, and the raw `facts` object. The server reads the selected PDF to compute SHA-256. The tools also expose the saved assessment, history, company data and an unchanged-input recheck. The demo is intended for loopback. A production deployment would need separate agent and human credentials and access controls.
+
+## Build and run the native adapter
+
+Install the .NET SDK specified in [global.json](global.json) and Python 3 with `venv`. Keep the entire published folder together. The apphost uses the installed .NET 10 runtime.
+
+```sh
+dotnet publish src/InvoiceDesk.Adapter -c Release --self-contained false -o dist/native
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001 --report-dir results/local/public --keep-state
+```
+
+The supported subset is one case and one step. Reports go to `results/local/public/`. The adapter runs independently of Web and keeps its SQLite state under the supplied `--state-dir`. An initial step requires both company data and invoice facts. Input validation returns a field path. Unsupported rule branches exit with a diagnostic on stderr.
+
+### Simplifications
+
+Each input quantity, unit price and monetary amount is limited to 1,000,000,000 to keep decimal products exact. Larger values return an unsupported-input error.
+
+Names are trimmed, internal whitespace collapses to one space, and casing uses `ToLowerInvariant()`. A mismatch when a name is needed for a match calls for clarification. Stage 00 reports that branch as unsupported.
+
+## Check a change
+
+```sh
+dotnet tool restore
+dotnet build InvoiceDesk.slnx -c Release
+dotnet csharpier check .
+dotnet format style InvoiceDesk.slnx --verify-no-changes
+dotnet format analyzers InvoiceDesk.slnx --verify-no-changes
+dotnet test InvoiceDesk.slnx -c Release --no-build
+cd frontend
+npm ci
+npm run lint
+npm run format:check
+npm run build
+```
+
+Use Node 24 for the frontend. Rules are under `src/InvoiceDesk.Core/Rules`, grouped by rule family. For example, the inclusive unit-price tolerance is in [UnitPriceCheck.cs](src/InvoiceDesk.Core/Rules/Pricing/UnitPriceCheck.cs). The [original business rules](docs/BUSINESS_RULES.md) and [runner contract](docs/EVALUATION.md) define evaluation behavior.
+
+---
+
 # Invoice Exception Agent
 
 Тестовое задание на позицию **Senior Software Engineer**. На выполнение — **до 16 часов, два рабочих дня**. Язык, хранилище и внутренняя архитектура — на ваш выбор. Использование AI coding agents приветствуется.

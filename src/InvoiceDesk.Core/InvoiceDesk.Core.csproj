@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="JsonSchema.Net" />
+    <InternalsVisibleTo Include="InvoiceDesk.Tests" />
+    <EmbeddedResource
+      Include="../../dataset/schemas/*.schema.json"
+      LogicalName="Schemas.%(Filename)%(Extension)"
+    />
+  </ItemGroup>
+</Project>
