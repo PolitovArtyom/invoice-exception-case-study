@@ -1,0 +1,6 @@
+namespace InvoiceDesk.Core.Model;
+
+public sealed record CaseMetadata(string CaseId, string Origin, string AsOf, IReadOnlyList<InvoiceSource> Sources)
+{
+    public const string PolicyVersion = "core-v1";
+}

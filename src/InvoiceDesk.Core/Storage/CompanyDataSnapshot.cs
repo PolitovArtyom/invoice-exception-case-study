@@ -1,0 +1,14 @@
+using InvoiceDesk.Core.Model.CompanyData;
+
+namespace InvoiceDesk.Core.Storage;
+
+internal sealed class CompanyDataSnapshot
+{
+    public long Id { get; init; }
+
+    public required string CaseId { get; init; }
+
+    public required string ContextVersion { get; init; }
+
+    public required CompanySnapshot Data { get; init; }
+}
