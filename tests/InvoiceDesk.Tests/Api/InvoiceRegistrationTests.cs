@@ -27,6 +27,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
                 "get_case_history",
                 "get_company_data",
                 "open_case",
+                "propose_match",
                 "register_invoice",
             },
             tools.Select(tool => tool.Name).Order(StringComparer.Ordinal)

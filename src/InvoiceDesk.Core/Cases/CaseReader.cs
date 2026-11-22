@@ -1,6 +1,8 @@
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
+using InvoiceDesk.Core.Rules.Matching;
+using InvoiceDesk.Core.Rules.Parties;
 using InvoiceDesk.Core.Storage;
 using InvoiceDesk.Core.Validation;
 
@@ -49,14 +51,30 @@ public sealed class CaseReader(CaseRepository repository)
             return null;
 
         var revision = repository.ReadRevision(caseId, revisionNumber);
-        return revision?.Result is null ? null : ReadView(invoiceCase, revision);
+        return revision?.Result is null ? null : ReadView(invoiceCase, revision, historical: true);
     }
 
-    private CaseView ReadView(InvoiceCase invoiceCase, CaseRevision revision)
+    public CaseView? ReadRevisionView(string caseId, int revisionNumber)
     {
+        var invoiceCase = repository.Find(caseId);
+        var revision = repository.ReadRevision(caseId, revisionNumber);
+        return invoiceCase is null || revision is null
+            ? null
+            : ReadView(invoiceCase, revision, historical: true);
+    }
+
+    private CaseView ReadView(
+        InvoiceCase invoiceCase,
+        CaseRevision revision,
+        bool historical = false
+    )
+    {
+        bool superseded = historical && revision.Number != invoiceCase.CurrentRevision;
+        var saved = View(revision);
         bool inputsChanged = repository.InputsChanged(invoiceCase, revision);
         int? latestDuplicateRevision =
-            revision.Document is { } document
+            !historical
+            && revision.Document is { } document
             && invoiceCase.CurrentRevision > document.ImportRevision
                 ? repository.ReadLatestDuplicateRevision(
                     invoiceCase.Id,
@@ -64,14 +82,82 @@ public sealed class CaseReader(CaseRepository repository)
                     invoiceCase.CurrentRevision
                 )
                 : null;
+        var (proposals, effective, openOrders) = ReadProposals(
+            revision,
+            !superseded && !inputsChanged
+        );
+        bool showDuplicateReading =
+            saved.DuplicateAttempt is not null
+            && (saved.Document is null || historical && saved.IsDuplicateAttempt);
+
         return new(
             invoiceCase.Metadata,
             invoiceCase.CurrentRevision,
-            Stage(revision, inputsChanged),
-            View(revision),
+            Stage(revision, !historical && inputsChanged),
+            saved,
             inputsChanged,
-            latestDuplicateRevision
+            latestDuplicateRevision,
+            superseded,
+            showDuplicateReading,
+            proposals,
+            effective,
+            openOrders
         );
+    }
+
+    private static (
+        ProposalView[] Proposals,
+        string? Effective,
+        PurchaseOrder[] OpenOrders
+    ) ReadProposals(CaseRevision revision, bool canReview)
+    {
+        if (revision.Document is not { } document)
+            return ([], null, []);
+
+        var data = revision.Snapshot.Data;
+        var parties = InvoiceParties.Resolve(document.Facts, data);
+        var registered = revision.Proposals?.Items ?? [];
+        var options =
+            registered.Length == 0
+                ? []
+                : new ProposalMatching(
+                    document.Facts,
+                    document.ImportRevision,
+                    data,
+                    parties
+                ).Options(registered);
+        var effective = ProposalMatching.Effective(options)?.Proposal.Proposal.ProposalId;
+        bool canPreview = canReview && revision.Result is not null;
+        bool clearDeterministically =
+            revision.Result
+                is { Decision: Decision.Clear, OrderMatchSource: MatchSource.Deterministic } result
+            && result.Lines.All(line => line.MatchSource == MatchSource.Deterministic);
+
+        var proposals = options
+            .Select(option =>
+            {
+                var supplier = data.Suppliers.Suppliers.FirstOrDefault(supplier =>
+                    supplier.SupplierId == option.Order?.SupplierId
+                );
+                bool offerPreview =
+                    canPreview && option.Applicable && option.Proposal.Confirmation is null;
+                return new ProposalView(
+                    option.Proposal,
+                    option.Order,
+                    supplier?.LegalName,
+                    option.Applicable,
+                    offerPreview,
+                    offerPreview && !clearDeterministically
+                );
+            })
+            .ToArray();
+        var openOrders = data
+            .PurchaseOrders.Orders.Where(order =>
+                order.Status == OrderStatus.Open && order.SupplierId == parties.Supplier?.SupplierId
+            )
+            .ToArray();
+
+        return (proposals, effective, openOrders);
     }
 
     public RevisionView[]? ReadHistory(string caseId) =>
@@ -100,7 +186,7 @@ public sealed class CaseReader(CaseRepository repository)
             : repository.ReadRevision(caseId, invoiceCase.CurrentRevision)?.Snapshot.Data;
     }
 
-    private static string AssessmentId(int revision) =>
+    internal static string AssessmentId(int revision) =>
         revision.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private static RevisionView View(CaseRevision revision)
@@ -109,6 +195,7 @@ public sealed class CaseReader(CaseRepository repository)
         return new(
             revision.Number,
             revision.Snapshot.Data.ContextVersion,
+            revision.Result?.PolicyVersion ?? CaseMetadata.PolicyVersion,
             revision.Action,
             document is null
                 ? null

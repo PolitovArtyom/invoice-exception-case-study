@@ -1,5 +1,8 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Validation;
 using InvoiceDesk.Web.CaseLoading;
 
 namespace InvoiceDesk.Web.Api;
@@ -13,6 +16,18 @@ internal static class CaseEndpoints
         cases.MapGet("/{caseId}", (string caseId, CaseReader reader, CasePdfs pdfs) =>
             reader.Read(caseId) is { } view ? Json(pdfs.WithAvailability(view)) : Results.NotFound()
         );
+        cases.MapGet("/{caseId}/history", (string caseId, CaseReader reader) =>
+            reader.ReadHistory(caseId) is { } history ? Json(history) : Results.NotFound()
+        );
+        cases.MapGet(
+            "/{caseId}/revisions/{number:int}",
+            (string caseId, int number, CaseReader reader, CasePdfs pdfs) =>
+                reader.ReadRevisionView(caseId, number) is { } view
+                    ? Json(pdfs.WithAvailability(view))
+                    : Results.NotFound()
+        );
+        cases.MapGet("/{caseId}/proposals/{proposalId}/confirmation-preview", ReadPreview);
+        cases.MapPost("/{caseId}/confirmations", ConfirmProposal);
         cases.MapGet(
             "/{caseId}/documents/{reference:long}/pdf",
             (string caseId, long reference, CasePdfs pdfs) =>
@@ -27,6 +42,66 @@ internal static class CaseEndpoints
             (string caseId, int number, CasePdfs pdfs) => Pdf(pdfs.FindOriginal(caseId, number))
         );
     }
+
+    private static IResult ReadPreview(string caseId, string proposalId, CaseService service)
+    {
+        try
+        {
+            return
+                service.PreviewConfirmation(caseId, Uri.UnescapeDataString(proposalId))
+                    is { } preview
+                ? Json(preview)
+                : Results.NotFound();
+        }
+        catch (InvoiceValidationException error)
+        {
+            return BadRequest(error);
+        }
+    }
+
+    private static async Task<IResult> ConfirmProposal(
+        string caseId,
+        HttpRequest request,
+        CaseReader reader,
+        CaseService service,
+        ILogger<Program> logger,
+        CancellationToken cancellation
+    )
+    {
+        if (!reader.Exists(caseId))
+            return Results.NotFound();
+
+        try
+        {
+            var body = await JsonNode.ParseAsync(request.Body, cancellationToken: cancellation);
+            var form = IntakeValidation.Read<ConfirmationForm>(body, "");
+            var response = service.ConfirmProposal(caseId, form);
+            logger.LogInformation(
+                "Confirmed proposal {ProposalId} for case {CaseId} at revision {Revision}",
+                form.ProposalId,
+                caseId,
+                response.Result.InputRevision
+            );
+            return Json(response);
+        }
+        catch (JsonException)
+        {
+            return BadRequest(
+                new InvoiceValidationException("", "Expected a JSON confirmation form.")
+            );
+        }
+        catch (InvoiceValidationException error)
+        {
+            return BadRequest(error);
+        }
+    }
+
+    private static IResult BadRequest(InvoiceValidationException error) =>
+        Results.Json(
+            error.Response,
+            InvoiceJson.Options,
+            statusCode: StatusCodes.Status400BadRequest
+        );
 
     private static IResult Pdf(string? path) =>
         path is null

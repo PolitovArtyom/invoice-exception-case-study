@@ -106,7 +106,7 @@ public static class IntakeValidation
         return snapshot;
     }
 
-    private static void ValidateCompanyData(CompanyData snapshot, string prefix) =>
+    internal static void ValidateCompanyData(CompanyData snapshot, string prefix) =>
         RequireUnique(
             snapshot
                 .PurchaseOrders.Orders.SelectMany(order => order.Lines)
@@ -118,9 +118,17 @@ public static class IntakeValidation
     public static T Read<T>(string schema, JsonNode? json, string prefix = "")
     {
         AssignmentSchemas.Instance.Validate(schema, json, prefix);
+        return Read<T>(json, prefix);
+    }
+
+    public static T Read<T>(JsonNode? json, string prefix)
+    {
+        if (json is null)
+            throw new InvoiceValidationException(prefix, "A JSON value is required.");
+
         try
         {
-            return InvoiceJson.ReadInput<T>(json!);
+            return InvoiceJson.ReadInput<T>(json);
         }
         catch (AmountLimitException error)
         {

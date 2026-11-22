@@ -38,6 +38,10 @@ public sealed class AssignmentSchemas
                 CommonDefinitions = JsonNode.Parse(json)!["$defs"]!.AsObject();
         }
 
+        const string proposalItem =
+            "https://invoice-exception-case-study.example/schemas/step-input.schema.json#/properties/proposals/items";
+        _schemas.Add("proposal", new JsonSchemaBuilder().Ref(proposalItem).Build(build));
+
         foreach (var definition in CommonDefinitions)
             ExtractionContract["$defs"]![definition.Key] = definition.Value?.DeepClone();
         InlineCommonReferences(ExtractionContract);

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import Tag from 'primevue/tag'
 import type { CaseStage } from '../caseStage'
 
-const props = defineProps<{ decision: string | null; stage: CaseStage }>()
+const props = defineProps<{ decision: string | null; stage?: CaseStage }>()
 const outcome = computed(() =>
   props.stage === 'closed' ? 'duplicate' : props.decision,
 )

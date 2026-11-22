@@ -77,12 +77,12 @@ jobs:
           python-version: '3.12'
       - name: Publish native adapter
         run: dotnet publish src/InvoiceDesk.Adapter -c Release --self-contained false -o dist/native
-      - name: Run the public acceptance subset
+      - name: Run public acceptance
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install -r requirements.txt
-          .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001,case-002,case-003,case-004,case-005,case-006,case-007,case-008,case-009 --report-dir results/ci/public
-          jq -e '.summary | .cases_total == 9 and .cases_passed == 9 and .steps_total == 9 and .steps_passed == 9 and .adapter_failures == 0 and .critical_false_clear == 0' results/ci/public/eval-report.json
+          .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --report-dir results/ci/public
+          jq -e '(.summary | .cases_total == 10 and .cases_passed == 10 and .steps_total == 12 and .steps_passed == 12 and .adapter_failures == 0 and .critical_false_clear == 0) and all(.cases[].steps[]; (.differences | length) == 0)' results/ci/public/eval-report.json
       - name: Upload public runner report
         if: always()
         uses: actions/upload-artifact@v6

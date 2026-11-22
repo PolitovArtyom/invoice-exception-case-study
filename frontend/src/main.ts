@@ -12,6 +12,12 @@ const router = createRouter({
   routes: [
     { path: '/', component: CaseListPage },
     { path: '/cases/:caseId', name: 'case', component: CasePage, props: true },
+    {
+      path: '/cases/:caseId/revisions/:revision',
+      name: 'revision',
+      component: CasePage,
+      props: true,
+    },
   ],
   scrollBehavior: () => ({ top: 0 }),
 })

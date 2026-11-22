@@ -47,9 +47,6 @@ public static class Adapter
 
     private static int Submit(StepInput input, TextWriter stdout, string stateDir)
     {
-        if (input.Proposals is not null || input.Confirmations is not null)
-            throw new UnsupportedInvoiceCaseException("proposals and confirmations");
-
         var reading = input.Document is { } document
             ? new InvoiceReading(document.Facts, document.ContentSha256, null, ReadingOrigin.Runner)
             : null;
@@ -67,12 +64,7 @@ public static class Adapter
             new InvoiceEvaluator(),
             TimeProvider.System
         );
-        var result = cases.SubmitCaseInputs(
-            new(input.CaseId, CaseOrigin.Assignment, input.AsOf, []),
-            input.Step,
-            input.Context,
-            reading
-        );
+        var result = cases.SubmitCaseInputs(input, reading);
 
         stdout.WriteLine(InvoiceJson.Write(result));
         Console.Error.WriteLine(

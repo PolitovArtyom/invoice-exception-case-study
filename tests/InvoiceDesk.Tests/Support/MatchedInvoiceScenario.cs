@@ -68,6 +68,42 @@ internal sealed record MatchedInvoiceScenario(InvoiceFacts Facts, CompanyData Co
         return new(facts, companyData);
     }
 
+    public MatchedInvoiceScenario WithoutOrderReference() =>
+        this with
+        {
+            Facts = Facts with
+            {
+                PurchaseOrderReference = null,
+                MissingFields =
+                [
+                    .. Facts.MissingFields,
+                    new("/purchase_order_reference", "not_present_in_document"),
+                ],
+            },
+        };
+
+    public MatchedInvoiceScenario WithFirstLine(InvoiceLine line) =>
+        this with
+        {
+            Facts = Facts with
+            {
+                Lines = [line, .. Facts.Lines.Skip(1)],
+                MissingFields =
+                    line.Sku is null && Facts.Lines[0].Sku is not null
+                        ? [.. Facts.MissingFields, new("/lines/0/sku", "not_present_in_document")]
+                        : Facts.MissingFields,
+            },
+        };
+
+    public MatchedInvoiceScenario WithOrders(params PurchaseOrder[] orders) =>
+        this with
+        {
+            CompanyData = CompanyData with
+            {
+                PurchaseOrders = CompanyData.PurchaseOrders with { Orders = orders },
+            },
+        };
+
     public MatchedInvoiceScenario WithMissingIban() =>
         this with
         {

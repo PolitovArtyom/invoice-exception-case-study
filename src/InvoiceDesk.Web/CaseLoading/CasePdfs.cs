@@ -14,8 +14,15 @@ internal sealed class CasePdfs(CaseReader reader, CaseFolders folders)
             view.Revision,
             view.InputsChanged,
             view.LatestDuplicateRevision,
+            view.Superseded,
+            view.ShowDuplicateReading,
+            view.Proposals,
+            view.EffectiveProposalId,
+            view.OpenSupplierOrders,
             InvoicePdfAvailable = FindPdf(
-                view.Revision.Document?.Source ?? view.Revision.DuplicateAttempt?.Reading.Source
+                view.ShowDuplicateReading
+                    ? view.Revision.DuplicateAttempt?.Reading.Source
+                    : view.Revision.Document?.Source
             )
                 is not null,
             OriginalPdfAvailable = FindOriginal(view.Case, view.Revision.OriginalInvoice)

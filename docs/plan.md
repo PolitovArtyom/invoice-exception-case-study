@@ -11,6 +11,16 @@
 | 06 Human resolution | Acceptance, reading correction and scenario 102. | All ten |
 | 07 Final delivery | Clean-clone verification, rule-change rehearsal and submission. | All ten |
 
-Stage 02 delivers party and currency checks, field-specific fact validation, duplicate history and conflict assessments. The page shows original-versus-current differences and PDF evidence and closes cases that contain only a resend. API tests exercise directory resolution, normalized re-imports, exact duplicate responses, validation without writes, and restart persistence. The official runner gates cases 001–009. The startup allow-list includes 001–003 and 005–009. Proposal-based resolution starts in stage 03. Supplier-issued corrected invoice scenario 103 remains part of the simulated prototype.
+Stage 03 completes `core-v1` through all ten public cases and twelve steps. Cases 004 and 010 start with company data and PDF references for the agent. The workspace shows the proposal mapping, independent checks after a hypothetical confirmation, and the saved audit trail. The adapter applies context, invoice, proposals and confirmations as one revision. Stage 04 adds operator update-file pickup, recheck and the late-receipt journey. Supplier-issued corrected invoice scenario 103 remains part of the simulated prototype.
+
+| Rule or lifecycle | API coverage |
+| --- | --- |
+| H-13–H-18 | [OrderMatchingTests](../tests/InvoiceDesk.Tests/Api/OrderMatchingTests.cs) covers an unknown reference, one or several complete candidates, absent supplier or buyer information and a closed order. |
+| H-19, H-24/H-25, H-42 | [ProposalAssessmentTests](../tests/InvoiceDesk.Tests/Api/ProposalAssessmentTests.cs) covers a proposed order, unit and receipt precedence, and independent violations that remain after confirmation. |
+| H-20–H-23 | [LineMatchingTests](../tests/InvoiceDesk.Tests/Api/LineMatchingTests.cs) covers absent exact links, alias and SKU matches, multiple exact targets and contested lines. |
+| H-35 negative PO/SKU | [OrderMatchingTests](../tests/InvoiceDesk.Tests/Api/OrderMatchingTests.cs) and [LineMatchingTests](../tests/InvoiceDesk.Tests/Api/LineMatchingTests.cs) verify that separators and leading zeros affect identifier equality. |
+| H-38/H-39 | [ProposalValidationTests](../tests/InvoiceDesk.Tests/Api/ProposalValidationTests.cs) validates actor, references, one-to-one links and contradictions. [AdapterProposalTests](../tests/InvoiceDesk.Tests/Scenarios/AdapterProposalTests.cs) exercises the runner actor schema and transaction boundaries. |
+| Case 010 and revision history | [PublicProposalLifecycleTests](../tests/InvoiceDesk.Tests/Api/PublicProposalLifecycleTests.cs) covers the MCP and page lifecycle through restart. [ProposalRevisionTests](../tests/InvoiceDesk.Tests/Api/ProposalRevisionTests.cs) covers exact previews, persisted history, repeats and proposal precedence. |
+| A-15/A-16 | [InvoiceDuplicateTests](../tests/InvoiceDesk.Tests/Api/InvoiceDuplicateTests.cs) covers original-record priority. [MatchingContextTests](../tests/InvoiceDesk.Tests/Api/MatchingContextTests.cs) covers line-ID collisions and orphaned receipts. |
 
 Every stage builds and runs the accumulated API and runner gates. GitHub Actions retains the public runner report. Workspace QA and reviews precede integration.

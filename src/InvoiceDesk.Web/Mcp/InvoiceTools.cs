@@ -115,6 +115,33 @@ public sealed class InvoiceTools(
         );
 
     [
+        McpServerTool(Name = "propose_match"),
+        Description(
+            "Register an agent proposal for the active invoice. Supply proposal_id, actor=agent, document_id, order_id and line_matches (document_line_id and order_line_id pairs)."
+        )
+    ]
+    public CallToolResult ProposeMatch(string case_id, JsonElement proposal) =>
+        ToolResponse.Run(
+            () =>
+            {
+                var input = IntakeValidation.Read<StepProposal>(
+                    "proposal",
+                    JsonNode.Parse(proposal.GetRawText()),
+                    "/proposal"
+                );
+                var assessment = cases.ProposeMatch(case_id, input);
+                logger.LogInformation(
+                    "Registered proposal {ProposalId} for case {CaseId} at revision {Revision}",
+                    input.ProposalId,
+                    case_id,
+                    assessment.Result.InputRevision
+                );
+                return assessment;
+            },
+            logger
+        );
+
+    [
         McpServerTool(Name = "assess_invoice"),
         Description("Return the saved assessment for the case's unchanged inputs.")
     ]

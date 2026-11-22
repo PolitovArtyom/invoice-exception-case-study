@@ -59,6 +59,9 @@ public sealed class InvoiceDatabase(DbContextOptions<InvoiceDatabase> options) :
             .Property(row => row.Action)
             .HasConversion<InvoiceJsonConversion<RevisionAction>>();
         revisions
+            .Property(row => row.Proposals)
+            .HasConversion(new InvoiceJsonConversion<StoredProposals?>());
+        revisions
             .Property(row => row.Result)
             .HasConversion(new InvoiceJsonConversion<Model.Results.InvoiceResult?>());
         revisions

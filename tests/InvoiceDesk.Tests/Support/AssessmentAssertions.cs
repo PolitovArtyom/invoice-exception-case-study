@@ -34,7 +34,8 @@ internal static class AssessmentAssertions
         string? matchedOrderId = "O",
         string? orderMatchSource = "deterministic",
         string disposition = "new",
-        string? originalDocumentId = null
+        string? originalDocumentId = null,
+        string?[]? lineMatchSources = null
     )
     {
         AssignmentSchemas.Instance.Validate("step-output", result);
@@ -53,6 +54,13 @@ internal static class AssessmentAssertions
                 .Select(line => Text(line!, "document_line_id"))
                 .Order(StringComparer.Ordinal)
         );
+
+        var lines = result["lines"]!
+            .AsArray()
+            .ToDictionary(line => Text(line!, "document_line_id")!);
+        var sources = lineMatchSources
+            ?? Enumerable.Repeat<string?>("deterministic", lineIds.Length).ToArray();
+        Assert.Equal(sources, lineIds.Select(id => Text(lines[id]!, "match_source")));
 
         var checks = result["checks"]!.AsArray();
         Assert.Equal(7 + 5 * lineIds.Length, checks.Count);
@@ -108,11 +116,11 @@ internal static class AssessmentAssertions
         string? matchSource,
         string net,
         string tax,
-        string ordered = "10",
+        string? ordered = "10",
         string? received = "10",
-        string previous = "0",
+        string? previous = "0",
         string? available = "10",
-        string remaining = "10"
+        string? remaining = "10"
     )
     {
         var line = Assert.Single(result["lines"]!.AsArray(), item =>
@@ -127,6 +135,34 @@ internal static class AssessmentAssertions
         Assert.Equal(previous, Text(line, "previously_invoiced"));
         Assert.Equal(available, Text(line, "available_to_invoice"));
         Assert.Equal(remaining, Text(line, "remaining_on_order"));
+    }
+
+    public static void AssertDuplicate(
+        JsonNode response,
+        string documentId,
+        string originalId,
+        string? assessment,
+        int revision
+    )
+    {
+        Assert.Null(response["assessment_id"]);
+        Assert.False(response["inputs_unchanged"]!.GetValue<bool>());
+        var result = response["result"]!;
+        AssignmentSchemas.Instance.Validate("step-output", result);
+        Assert.Equal("duplicate", Text(result, "import_disposition"));
+        Assert.Equal(documentId, Text(result, "document_id"));
+        Assert.Equal(originalId, Text(result, "original_document_id"));
+        Assert.Equal(assessment, Text(result, "existing_assessment_ref"));
+        Assert.Equal(revision, result["input_revision"]!.GetValue<int>());
+        foreach (
+            string field in new[] { "decision", "totals", "matched_order_id", "order_match_source" }
+        )
+        {
+            Assert.True(result.AsObject().ContainsKey(field));
+            Assert.Null(result[field]);
+        }
+        foreach (string field in new[] { "lines", "checks", "questions" })
+            Assert.Empty(result[field]!.AsArray());
     }
 
     public static string? Text(JsonNode node, string field) => node[field]?.GetValue<string>();

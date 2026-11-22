@@ -2,6 +2,8 @@ import type { CaseStage } from './caseStage'
 
 type CaseOrigin = 'assignment' | 'own'
 export type ReadingOrigin = 'fixture' | 'agent' | 'runner'
+export type MatchSource =
+  'deterministic' | 'agent_proposal' | 'human_confirmation'
 
 export interface CaseSummary {
   case_id: string
@@ -57,6 +59,7 @@ export interface InvoiceLine {
 export interface InvoiceLineResult {
   document_line_id: string
   order_line_id: string | null
+  match_source: MatchSource | null
   calculated_net: string
   calculated_tax: string
   ordered: string | null
@@ -80,6 +83,7 @@ export interface InvoiceMissingField {
 export interface InvoiceResult {
   decision: string
   matched_order_id: string | null
+  order_match_source: MatchSource | null
   checks: InvoiceCheck[]
   lines: InvoiceLineResult[]
   totals: {
@@ -129,34 +133,146 @@ export interface CaseView {
   invoice_pdf_available: boolean
   inputs_changed: boolean
   latest_duplicate_revision: number | null
+  superseded: boolean
+  show_duplicate_reading: boolean
+  effective_proposal_id: string | null
+  proposals: ProposalView[]
+  open_supplier_orders: PurchaseOrder[]
   stage: CaseStage
-  revision: {
-    number: number
-    context_version: string
-    document: {
-      reference: number
-      source: Source | null
+  revision: RevisionView
+}
+
+export interface RevisionView {
+  number: number
+  context_version: string
+  policy_version: string
+  assessment_id: string | null
+  action: {
+    kind:
+      | 'load_case'
+      | 'register_invoice'
+      | 'submit_case_inputs'
+      | 'propose_match'
+      | 'confirm_proposal'
+      | 'replace_company_data'
+    actor: 'trusted_loader' | 'agent' | 'human' | 'runner'
+    recorded_at: string
+    proposal_ids: string[] | null
+    confirmations: { proposal_id: string; confirmed_by: string }[] | null
+    company_data_submitted: boolean
+    document_submitted: boolean
+  }
+  document: {
+    reference: number
+    source: Source | null
+    facts: InvoiceFacts
+    reading_origin: ReadingOrigin
+  } | null
+  result: InvoiceResult | null
+  original_invoice: { document_id: string } | null
+  is_duplicate_attempt: boolean
+  duplicate_attempt: {
+    reading: {
       facts: InvoiceFacts
+      source: Source | null
       reading_origin: ReadingOrigin
-    } | null
-    result: InvoiceResult | null
-    original_invoice: { document_id: string } | null
-    duplicate_attempt: {
-      reading: {
-        facts: InvoiceFacts
-        source: Source | null
-        reading_origin: ReadingOrigin
-      }
-    } | null
+    }
+  } | null
+}
+
+interface PurchaseOrder {
+  order_id: string
+  reference: string
+  supplier_id: string
+  currency: string
+  lines: {
+    line_id: string
+    sku: string | null
+    description: string
+    quantity: string
+    unit: string
+    unit_net_price: string
+  }[]
+}
+
+export interface ProposalView {
+  registration: {
+    proposal: {
+      proposal_id: string
+      document_id: string
+      order_id: string
+      line_matches: { document_line_id: string; order_line_id: string }[]
+    }
+    confirmation: { confirmed_by: string } | null
+  }
+  order: PurchaseOrder | null
+  supplier_name: string | null
+  applicable: boolean
+  can_preview: boolean
+  can_confirm: boolean
+}
+
+interface ConfirmationPreview {
+  expected_revision: number
+  proposal_id: string
+  result: InvoiceResult
+}
+
+export class ActionError extends Error {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
+    super(message)
   }
 }
 
 export function listCases() {
-  return read<CaseSummary[]>('/api/cases')
+  return request<CaseSummary[]>('/api/cases')
 }
 
-export function getCase(caseId: string) {
-  return read<CaseView>(`/api/cases/${encodeURIComponent(caseId)}`)
+function casePath(caseId: string) {
+  return `/api/cases/${encodeURIComponent(caseId)}`
+}
+
+export function getCase(caseId: string, revision?: string) {
+  const path = casePath(caseId)
+  return request<CaseView>(
+    revision ? `${path}/revisions/${encodeURIComponent(revision)}` : path,
+  )
+}
+
+export function getHistory(caseId: string) {
+  return request<RevisionView[]>(`${casePath(caseId)}/history`)
+}
+
+export function previewConfirmation(
+  caseId: string,
+  proposalId: string,
+  signal: AbortSignal,
+) {
+  return request<ConfirmationPreview>(
+    `${casePath(caseId)}/proposals/${encodeURIComponent(proposalId)}/confirmation-preview`,
+    { signal },
+  )
+}
+
+export async function confirmProposal(
+  caseId: string,
+  preview: ConfirmationPreview,
+  name: string,
+  reviewed: boolean,
+) {
+  await request(`${casePath(caseId)}/confirmations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      proposal_id: preview.proposal_id,
+      expected_revision: preview.expected_revision,
+      confirmed_by: name,
+      supporting_documents_reviewed: reviewed,
+    }),
+  })
 }
 
 export function documentPdf(caseId: string, reference: number) {
@@ -171,13 +287,20 @@ export function revisionPdf(
   return `/api/cases/${encodeURIComponent(caseId)}/revisions/${revision}/${kind}-pdf`
 }
 
-async function read<T>(path: string): Promise<T> {
-  const response = await fetch(path)
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(path, options)
   if (!response.ok) {
+    if (response.status === 400) {
+      const body = (await response.json()) as {
+        error?: { details?: { path: string; message: string }[] }
+      }
+      const detail = body.error?.details?.[0]
+      if (detail) throw new ActionError(detail.message, detail.path)
+    }
     throw new Error(
       response.status === 404
-        ? 'Case not found.'
-        : 'Unable to load the case data.',
+        ? 'The requested case, revision or proposal was not found.'
+        : 'Unable to complete the request.',
     )
   }
   return response.json() as Promise<T>

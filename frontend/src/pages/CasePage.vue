@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import {
   documentPdf,
   getCase,
+  getHistory,
   revisionPdf,
   type CaseView,
   type ReadingOrigin,
+  type RevisionView,
 } from '../api'
+import CaseHistory from '../components/CaseHistory.vue'
+import ProposalReview from '../components/ProposalReview.vue'
 import ConflictDifferences from '../components/ConflictDifferences.vue'
 import InvoiceFactsPanel from '../components/InvoiceFactsPanel.vue'
 import ChecksTable from '../components/ChecksTable.vue'
@@ -26,23 +30,27 @@ const readingOriginLabels: Record<ReadingOrigin, string> = {
   runner: 'loaded by the runner',
 }
 
-const props = defineProps<{ caseId: string }>()
+const props = defineProps<{ caseId: string; revision?: string }>()
+const router = useRouter()
+let nextRevisionMessage = ''
 const view = ref<CaseView | null>(null)
 const error = ref('')
+const actionMessage = ref('')
+const history = ref<RevisionView[]>([])
 const document = computed(() => view.value?.revision.document)
-const duplicate = computed(
-  () => view.value?.revision.duplicate_attempt?.reading,
+const reading = computed(() =>
+  view.value?.show_duplicate_reading
+    ? view.value.revision.duplicate_attempt?.reading
+    : document.value,
 )
-const facts = computed(() => document.value?.facts ?? duplicate.value?.facts)
-const readingOrigin = computed(
-  () => document.value?.reading_origin ?? duplicate.value?.reading_origin,
-)
+const facts = computed(() => reading.value?.facts)
+const readingOrigin = computed(() => reading.value?.reading_origin)
 const pdf = computed(() => {
   if (!view.value?.invoice_pdf_available) return undefined
+  if (view.value.show_duplicate_reading)
+    return revisionPdf(props.caseId, view.value.revision.number, 'duplicate')
   if (document.value?.source)
     return documentPdf(props.caseId, document.value.reference)
-  if (duplicate.value?.source && view.value)
-    return revisionPdf(props.caseId, view.value.revision.number, 'duplicate')
   return undefined
 })
 const original = computed(() => view.value?.revision.original_invoice)
@@ -68,13 +76,46 @@ const lineCards = computed(() =>
     return [{ line, assessment, checks }]
   }),
 )
-onMounted(async () => {
+async function load(message = '') {
+  const caseId = props.caseId
+  const revision = props.revision
+  error.value = ''
+  actionMessage.value = ''
   try {
-    view.value = await getCase(props.caseId)
+    const [page, revisions] = await Promise.all([
+      getCase(caseId, revision),
+      getHistory(caseId),
+    ])
+    if (props.caseId !== caseId || props.revision !== revision) return
+    view.value = page
+    history.value = revisions
+    actionMessage.value = message
   } catch (failure) {
-    error.value = (failure as Error).message
+    if (props.caseId === caseId && props.revision === revision)
+      error.value = (failure as Error).message
   }
-})
+}
+
+async function refreshAfterProposal(message = '') {
+  if (!props.revision) {
+    await load(message)
+    return
+  }
+
+  nextRevisionMessage = message
+  await router.replace({ name: 'case', params: { caseId: props.caseId } })
+}
+
+watch(
+  () => [props.caseId, props.revision],
+  () => {
+    view.value = null
+    const message = nextRevisionMessage
+    nextRevisionMessage = ''
+    void load(message)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -86,6 +127,13 @@ onMounted(async () => {
   <p v-if="error" role="alert">{{ error }}</p>
   <p v-else-if="view === null" role="status">Loading case…</p>
   <template v-else>
+    <p v-if="actionMessage" role="status" class="card">{{ actionMessage }}</p>
+    <p v-if="view.superseded" class="card">
+      Revision {{ view.revision.number }} has been superseded.
+      <RouterLink :to="{ name: 'case', params: { caseId } }"
+        >Open the latest</RouterLink
+      >
+    </p>
     <section class="card case-header" aria-labelledby="invoice-title">
       <div>
         <h1 id="invoice-title">{{ facts?.number ?? caseId }}</h1>
@@ -117,7 +165,13 @@ onMounted(async () => {
               </dd>
             </div>
             <div v-if="result?.matched_order_id">
-              <dt>Matched order</dt>
+              <dt>
+                {{
+                  result.order_match_source === 'agent_proposal'
+                    ? 'Proposed order'
+                    : 'Matched order'
+                }}
+              </dt>
               <dd class="mono">{{ result.matched_order_id }}</dd>
             </div>
           </dl>
@@ -131,7 +185,14 @@ onMounted(async () => {
           >
           <SourceTag source="invoice" />
         </p>
-        <DecisionTag :decision="result?.decision ?? null" :stage="view.stage" />
+        <DecisionTag
+          :decision="
+            view.show_duplicate_reading
+              ? 'duplicate'
+              : (result?.decision ?? null)
+          "
+          :stage="view.stage"
+        />
         <p
           v-if="
             view.stage === 'ready_for_accounting' || view.stage === 'closed'
@@ -156,11 +217,15 @@ onMounted(async () => {
       </div>
     </section>
     <section
-      v-if="view.stage === 'closed' && original"
+      v-if="view.show_duplicate_reading && original"
       class="card"
       aria-labelledby="duplicate-heading"
     >
-      <h2 id="duplicate-heading">Closed as duplicate</h2>
+      <h2 id="duplicate-heading">
+        {{
+          view.stage === 'closed' ? 'Closed as duplicate' : 'Duplicate attempt'
+        }}
+      </h2>
       <p>
         Resend of
         <a
@@ -177,8 +242,8 @@ onMounted(async () => {
     <p v-if="view.latest_duplicate_revision !== null" class="card">
       Duplicate received at revision {{ view.latest_duplicate_revision }}
     </p>
-    <p v-if="view.inputs_changed" class="card">
-      Company data changed after this assessment. A new assessment is required
+    <p v-if="view.inputs_changed && !view.superseded" class="card">
+      Case inputs changed after this assessment. A new assessment is required
       before accounting.
     </p>
     <template v-if="result && facts">
@@ -186,6 +251,13 @@ onMounted(async () => {
         :checks="result.checks"
         :lines="facts.lines"
         :currency="facts.currency"
+      />
+      <ProposalReview
+        v-if="view.proposals.length"
+        :key="view.current_revision + '/' + view.revision.number"
+        :view="view"
+        :facts="facts"
+        @refresh="refreshAfterProposal"
       />
       <ConflictDifferences
         v-if="original"
@@ -206,6 +278,13 @@ onMounted(async () => {
           :assessment="assessment"
           :checks="checks"
           :facts="facts"
+          :confirmed-by="
+            view.proposals.find(
+              (item) =>
+                item.registration.proposal.proposal_id ===
+                view?.effective_proposal_id,
+            )?.registration.confirmation?.confirmed_by
+          "
         />
       </section>
       <InvoiceTotals
@@ -217,5 +296,10 @@ onMounted(async () => {
     </template>
     <InvoiceFactsPanel v-if="facts" :facts="facts" :pdf="pdf" />
     <p v-else class="waiting-note">The agent has not read this invoice yet.</p>
+    <CaseHistory
+      :case-id="caseId"
+      :selected="view.revision.number"
+      :revisions="history"
+    />
   </template>
 </template>

@@ -1,0 +1,98 @@
+<script setup lang="ts">
+import type { RevisionView } from '../api'
+import DecisionTag from './DecisionTag.vue'
+
+defineProps<{ caseId: string; selected: number; revisions: RevisionView[] }>()
+
+const actions: Record<RevisionView['action']['kind'], string> = {
+  load_case: 'Loaded case',
+  register_invoice: 'Registered invoice',
+  submit_case_inputs: 'Submitted case inputs',
+  propose_match: 'Proposed a match',
+  confirm_proposal: 'Confirmed a proposal',
+  replace_company_data: 'Loaded company data',
+}
+const actors: Record<RevisionView['action']['actor'], string> = {
+  trusted_loader: 'Trusted loader',
+  agent: 'Agent',
+  human: 'Person',
+  runner: 'Runner',
+}
+</script>
+
+<template>
+  <section class="card" aria-labelledby="history-heading">
+    <h2 id="history-heading">History</h2>
+    <ol class="revision-history">
+      <li
+        v-for="(revision, index) in revisions"
+        :key="revision.number"
+        :class="{ 'selected-revision': revision.number === selected }"
+      >
+        <RouterLink
+          :to="{
+            name: 'revision',
+            params: { caseId, revision: String(revision.number) },
+          }"
+          :aria-current="revision.number === selected ? 'page' : undefined"
+          class="mono"
+        >
+          Revision {{ revision.number }}
+        </RouterLink>
+        <div>
+          <p>
+            <strong>{{ actions[revision.action.kind] }}</strong> ·
+            {{ actors[revision.action.actor] }}
+          </p>
+          <p v-if="revision.action.proposal_ids?.length" class="muted">
+            {{ revision.action.proposal_ids.join(', ') }}
+          </p>
+          <p
+            v-for="(confirmation, position) in revision.action.confirmations ??
+            []"
+            :key="position"
+          >
+            {{ confirmation.confirmed_by }} confirmed
+            {{ confirmation.proposal_id }}
+          </p>
+          <p class="muted">
+            Policy {{ revision.policy_version }} · Company data
+            {{ revision.context_version }} · Document
+            {{
+              revision.duplicate_attempt?.reading.facts.document_id ??
+              revision.document?.facts.document_id ??
+              '—'
+            }}
+          </p>
+          <p
+            v-if="
+              revisions[index + 1] &&
+              revision.context_version !== revisions[index + 1]?.context_version
+            "
+            class="muted"
+          >
+            Company data changed from
+            {{ revisions[index + 1]?.context_version }}
+          </p>
+          <p
+            v-else-if="
+              index < revisions.length - 1 &&
+              revision.action.company_data_submitted
+            "
+            class="muted"
+          >
+            Company data submitted
+          </p>
+        </div>
+        <DecisionTag
+          v-if="revision.result"
+          :decision="revision.result.decision"
+        />
+        <span v-else-if="revision.is_duplicate_attempt" class="muted"
+          >Duplicate</span
+        >
+        <span v-else class="muted">No assessment</span>
+      </li>
+    </ol>
+  </section>
+</template>

@@ -14,6 +14,6 @@ import { RouterLink, RouterView } from 'vue-router'
     <span class="demo-role">Accounts payable · Demo</span>
   </header>
   <main class="page">
-    <RouterView :key="$route.path" />
+    <RouterView :key="String($route.params.caseId ?? $route.path)" />
   </main>
 </template>

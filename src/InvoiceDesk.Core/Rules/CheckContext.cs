@@ -14,6 +14,7 @@ internal sealed record CheckContext(
     Supplier? Supplier,
     Buyer? Buyer,
     PurchaseOrder? Order,
+    MatchSource? OrderSource,
     MatchedLine[] Lines,
     InvoiceBusinessKey? BusinessKey,
     InvoiceImportMatch? ConflictingInvoice,
@@ -23,6 +24,7 @@ internal sealed record CheckContext(
 internal sealed record MatchedLine(
     InvoiceLine Invoice,
     PurchaseOrderLine? OrderLine,
+    MatchSource? Source,
     LineMatchReason? MatchReason,
     LineAmounts Amounts,
     LineQuantities? Quantities

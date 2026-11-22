@@ -7,25 +7,34 @@ namespace InvoiceDesk.Tests.Scenarios;
 
 public sealed class PublicReplayTests
 {
+    public static TheoryData<string, (string? Decision, string Disposition)[]> Outcomes =>
+        new()
+        {
+            { "case-001", [("clear", "new")] },
+            { "case-002", [("clear", "new")] },
+            { "case-003", [("blocked", "new")] },
+            { "case-004", [("needs_review", "new")] },
+            { "case-005", [("blocked", "new")] },
+            { "case-006", [("blocked", "new")] },
+            { "case-007", [("blocked", "new")] },
+            { "case-008", [(null, "duplicate")] },
+            { "case-009", [("blocked", "conflict")] },
+            {
+                "case-010",
+                [("needs_information", "new"), ("needs_review", "new"), ("clear", "new")]
+            },
+        };
+
     [Theory]
-    [InlineData("case-001", "clear")]
-    [InlineData("case-002", "clear")]
-    [InlineData("case-003", "blocked")]
-    [InlineData("case-004", "needs_review")]
-    [InlineData("case-005", "blocked")]
-    [InlineData("case-006", "blocked")]
-    [InlineData("case-007", "blocked")]
-    [InlineData("case-008", null, "duplicate")]
-    [InlineData("case-009", "blocked", "conflict")]
+    [MemberData(nameof(Outcomes))]
     public void Should_return_the_published_outcome_when_public_steps_are_replayed(
         string caseId,
-        string? decision,
-        string disposition = "new"
+        (string? Decision, string Disposition)[] expected
     )
     {
         using var state = new TemporaryDirectory();
         int previousRevision = 0;
-        var outcomes = new List<(string? Decision, string? Disposition)>();
+        var outcomes = new List<(string? Decision, string Disposition)>();
         foreach (string step in PublicCases.Steps(caseId))
         {
             using var input = File.OpenText(step);
@@ -41,21 +50,12 @@ public sealed class PublicReplayTests
             outcomes.Add(
                 (
                     result["decision"]?.GetValue<string>(),
-                    result["import_disposition"]?.GetValue<string>()
+                    result["import_disposition"]!.GetValue<string>()
                 )
             );
         }
 
-        Assert.Equal((decision, disposition), Assert.Single(outcomes));
-    }
-
-    [Fact]
-    public void Should_fail_without_a_verdict_when_a_rule_branch_is_unimplemented()
-    {
-        var step = PublicCases.ReadFirstStep();
-        step["document"]!["facts"]!["purchase_order_reference"] = "UNMATCHED-PO";
-
-        AssertRejectedWithoutRevision(step);
+        Assert.Equal(expected, outcomes);
     }
 
     [Theory]

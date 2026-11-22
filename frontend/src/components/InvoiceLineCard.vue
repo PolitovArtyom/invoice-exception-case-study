@@ -18,6 +18,7 @@ const props = defineProps<{
   assessment: InvoiceLineResult
   checks: InvoiceCheck[]
   facts: InvoiceFacts
+  confirmedBy?: string
 }>()
 const match = computed(() => find('LINE_MATCH'))
 const price = computed(() => find('UNIT_PRICE'))
@@ -31,6 +32,20 @@ const arithmeticActual = computed(() =>
   actualOperands(props.facts, arithmetic.value),
 )
 const orderUnit = computed(() => match.value?.expected?.unit?.value)
+const matchProvenance = computed(() => {
+  if (props.assessment.match_source === 'agent_proposal')
+    return 'Proposed by the agent'
+  if (props.assessment.match_source === 'human_confirmation')
+    return props.confirmedBy
+      ? `Confirmed by ${props.confirmedBy}`
+      : 'Human confirmation'
+
+  const reason = match.value?.actual?.match_reason?.value
+  if (reason === 'sku') return 'Same SKU'
+  if (reason === 'explicit_alias') return 'Order alias'
+  if (reason === 'description') return 'Same description'
+  return 'Unresolved'
+})
 const allPassed = computed(() =>
   props.checks.every((check) => check.status === 'pass'),
 )
@@ -39,6 +54,10 @@ function quantityWithUnit(operand: CheckOperand | undefined, unit: unknown) {
   if (typeof operand?.value !== 'string' || typeof unit !== 'string')
     return operand
   return { ...operand, value: `${formatDecimal(operand.value)} ${unit}` }
+}
+
+function assessmentQuantity(value: string | null, source: string) {
+  return value === null ? undefined : { value, source }
 }
 
 function find(code: string) {
@@ -82,8 +101,17 @@ function find(code: string) {
         />
         <CheckVerdict v-if="match" :check="match" />
       </div>
+      <p class="muted">{{ matchProvenance }}</p>
+      <p class="muted">
+        Invoice {{ line.line_id }} · {{ line.description
+        }}<template v-if="line.sku"> · SKU {{ line.sku }}</template>
+      </p>
       <p v-if="match?.expected?.description" class="muted">
+        Order {{ assessment.order_line_id }} ·
         {{ match.expected.description.value }}
+        <template v-if="match.expected.sku?.value">
+          · SKU {{ match.expected.sku.value }}</template
+        >
       </p>
     </div>
 
@@ -108,22 +136,38 @@ function find(code: string) {
         <CheckOperands
           :operands="{
             Invoiced: quantityWithUnit(
-              received?.actual?.quantity ?? remaining?.actual?.quantity,
+              received?.actual?.quantity ??
+                remaining?.actual?.quantity ??
+                assessmentQuantity(line.quantity, 'invoice'),
               line.unit,
             ),
-            Ordered: quantityWithUnit(remaining?.expected?.ordered, orderUnit),
-            Received: quantityWithUnit(received?.expected?.received, orderUnit),
+            Ordered: quantityWithUnit(
+              remaining?.expected?.ordered ??
+                assessmentQuantity(assessment.ordered, 'order'),
+              orderUnit,
+            ),
+            Received: quantityWithUnit(
+              received?.expected?.received ??
+                assessmentQuantity(assessment.received, 'receipts'),
+              orderUnit,
+            ),
             'Previously invoiced': quantityWithUnit(
               remaining?.expected?.previously_invoiced ??
-                received?.expected?.previously_invoiced,
+                received?.expected?.previously_invoiced ??
+                assessmentQuantity(assessment.previously_invoiced, 'history'),
               orderUnit,
             ),
             'Available to invoice': quantityWithUnit(
-              received?.expected?.available_to_invoice,
+              received?.expected?.available_to_invoice ??
+                assessmentQuantity(
+                  assessment.available_to_invoice,
+                  'calculated',
+                ),
               orderUnit,
             ),
             'Remaining on order': quantityWithUnit(
-              remaining?.expected?.remaining_on_order,
+              remaining?.expected?.remaining_on_order ??
+                assessmentQuantity(assessment.remaining_on_order, 'calculated'),
               orderUnit,
             ),
           }"

@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Model;
-using InvoiceDesk.Core.Validation;
 using InvoiceDesk.Tests.Support;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
@@ -230,7 +229,8 @@ public sealed class InvoiceDuplicateTests
 
     [Fact]
     [Trait("H", "H-37")]
-    public async Task Should_pick_the_later_equal_original_when_an_earlier_same_key_version_differs()
+    [Trait("Decision", "A-15")]
+    public async Task Should_choose_first_equal_original_when_multiple_records_share_a_key()
     {
         var scenario = Baseline();
         var facts = scenario.Facts;
@@ -266,6 +266,42 @@ public sealed class InvoiceDuplicateTests
         Assert.Equal(5, afterResends["current_revision"]!.GetValue<int>());
         AssertSameJson(conflict, afterResends["revision"]!["result"]);
         Assert.Equal(5, afterResends["latest_duplicate_revision"]!.GetValue<int>());
+    }
+
+    [Fact]
+    [Trait("Decision", "A-15")]
+    public async Task Should_choose_first_equal_history_record_when_earlier_history_differs()
+    {
+        var baseline = Baseline();
+        var scenario = baseline.WithCountedInvoice(baseline.Facts, "HISTORY-EQUAL");
+        var original = scenario.CompanyData.InvoiceHistory.Documents[0];
+        var earlier = original with
+        {
+            DocumentId = "HISTORY-UNEQUAL",
+            NormalizedFacts = original.NormalizedFacts with
+            {
+                DueDate = original.NormalizedFacts.DueDate!.Value.AddDays(1),
+            },
+        };
+        var history = scenario.CompanyData.InvoiceHistory with
+        {
+            Documents = [earlier, original, original with { DocumentId = "HISTORY-LATER" }],
+        };
+        scenario = scenario with
+        {
+            CompanyData = scenario.CompanyData with { InvoiceHistory = history },
+        };
+
+        using var environment = new CaseTestEnvironment();
+        await using var app = environment.Start();
+        using var page = app.CreateClient();
+        scenario.Prepare(environment, app);
+        await using var mcp = await ConnectMcp(app);
+        var response = Payload(await Register(mcp, RawFacts(scenario.Facts), Source()));
+        AssertDuplicate(response, "D", "HISTORY-EQUAL", null, 2);
+        var revisions = (await Read(page, CasePath + "/history")).AsArray();
+        Assert.Equal(2, revisions.Count);
+        Assert.All(revisions, revision => Assert.Null(revision!["assessment_id"]));
     }
 
     [Fact]
@@ -366,31 +402,56 @@ public sealed class InvoiceDuplicateTests
         }
     }
 
-    private static void AssertDuplicate(
-        JsonNode response,
-        string documentId,
-        string originalId,
-        string assessment,
-        int revision
-    )
+    [Fact]
+    public async Task Should_show_the_resend_and_its_pdf_when_opening_a_saved_duplicate_revision()
     {
-        Assert.Null(response["assessment_id"]);
-        Assert.False(response["inputs_unchanged"]!.GetValue<bool>());
-        var result = response["result"]!;
-        AssignmentSchemas.Instance.Validate("step-output", result);
-        Assert.Equal("duplicate", Text(result, "import_disposition"));
-        Assert.Equal(documentId, Text(result, "document_id"));
-        Assert.Equal(originalId, Text(result, "original_document_id"));
-        Assert.Equal(assessment, Text(result, "existing_assessment_ref"));
-        Assert.Equal(revision, result["input_revision"]!.GetValue<int>());
-        foreach (
-            string field in new[] { "decision", "totals", "matched_order_id", "order_match_source" }
-        )
+        var scenario = Baseline();
+        using var environment = new CaseTestEnvironment();
+        await using var app = environment.Start();
+        using var page = app.CreateClient();
+        scenario.Prepare(environment, app, "D2");
+        await using var mcp = await ConnectMcp(app);
+        var original = Payload(await Register(mcp, RawFacts(scenario.Facts), Source()));
+        var resend = scenario.Facts with
         {
-            Assert.True(result.AsObject().ContainsKey(field));
-            Assert.Null(result[field]);
-        }
-        foreach (string field in new[] { "lines", "checks", "questions" })
-            Assert.Empty(result[field]!.AsArray());
+            DocumentId = "D2",
+            PaymentTerms = "Alternate printed terms",
+            Evidence = [new("/type", "D2", 2, "INVOICE copy")],
+        };
+        var duplicate = Payload(await Register(mcp, RawFacts(resend), Source(second: true)));
+        AssertDuplicate(duplicate, "D2", "D", "2", 3);
+
+        var saved = await Read(page, CasePath + "/revisions/3");
+        var revision = saved["revision"]!;
+        Assert.Equal("needs_attention", Text(saved, "stage"));
+        AssertSameJson(RawFacts(scenario.Facts), revision["document"]!["facts"]);
+        Assert.True(revision["is_duplicate_attempt"]!.GetValue<bool>());
+        Assert.True(saved["show_duplicate_reading"]!.GetValue<bool>());
+        Assert.Null(revision["result"]);
+        Assert.Equal("D", Text(revision["original_invoice"]!, "document_id"));
+        AssertSameJson(RawFacts(resend), revision["duplicate_attempt"]!["reading"]!["facts"]);
+        Assert.True(saved["invoice_pdf_available"]!.GetValue<bool>());
+        Assert.True(saved["original_pdf_available"]!.GetValue<bool>());
+
+        string duplicateFile = Path.Combine(environment.ScenarioPath, "document-002.pdf");
+        Assert.Equal(
+            await File.ReadAllBytesAsync(duplicateFile),
+            await page.GetByteArrayAsync(CasePath + "/revisions/3/duplicate-pdf")
+        );
+        Assert.Equal(
+            await File.ReadAllBytesAsync(
+                Path.Combine(environment.ScenarioPath, "document-001.pdf")
+            ),
+            await page.GetByteArrayAsync(CasePath + "/revisions/3/original-pdf")
+        );
+        File.Delete(duplicateFile);
+        var withoutResendPdf = await Read(page, CasePath + "/revisions/3");
+        Assert.False(withoutResendPdf["invoice_pdf_available"]!.GetValue<bool>());
+        Assert.True(withoutResendPdf["original_pdf_available"]!.GetValue<bool>());
+
+        var current = await Read(page, CasePath);
+        Assert.True(current["invoice_pdf_available"]!.GetValue<bool>());
+        AssertSameJson(original["result"], current["revision"]!["result"]);
+        AssertSameJson(RawFacts(scenario.Facts), current["revision"]!["document"]!["facts"]);
     }
 }

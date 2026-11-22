@@ -2,9 +2,9 @@
 
 Invoice Desk checks an invoice against a saved company-data snapshot and shows the decision and its supporting calculations. An agent reads the PDF and submits printed facts with evidence. The application evaluates those facts using the assignment's `core-v1` rules.
 
-| Scope | Stage 02 |
+| Scope | Stage 03 |
 | --- | --- |
-| Built | PDF source references, MCP fact registration, SQLite assessment history, and a workspace for matched invoices. Party, currency, quantity, price, arithmetic and bank checks produce saved assessments. The workspace shows conflicts, closes duplicate-only cases and pairs parsed facts with PDF evidence. The native adapter replays nine public cases. |
+| Built | PDF source references, MCP fact registration, SQLite assessment history, and a workspace for matched invoices. Party, currency, quantity, price, arithmetic and bank checks produce saved assessments. The workspace shows conflicts, closes duplicate-only cases and pairs parsed facts with PDF evidence. R2 matches orders and lines, tracks agent proposals and records human confirmation. The native adapter passes all ten public cases and twelve steps. |
 | Described | [Remaining stages](docs/plan.md), [architecture](docs/architecture.md), and the [assignment](#invoice-exception-agent). |
 | Prototype | [Simulated product vision](submission/prototype/), including the unbuilt case 103. |
 
@@ -18,7 +18,7 @@ docker compose up --build --wait
 
 Open the case list at `http://127.0.0.1:8080/` and the clean invoice at `http://127.0.0.1:8080/cases/case-001`. Compose waits for `/health`, which becomes available after migrations and case loading. Set `INVOICE_PORT` to change the loopback port.
 
-With a fresh database, cases 001–003 and 005–009 start with their first-step facts and carry the label “loaded from test data, not read by the agent”. [Case 006](http://127.0.0.1:8080/cases/case-006) shows a supplier mismatch alongside a passing bank check. Case 008 is in Closed with a link to the original PDF. [Case 009](http://127.0.0.1:8080/cases/case-009) shows the differences from the counted original. Case 004 and other unlisted folders start with company data and PDF references. To exercise a fresh registration, add a clean invoice under a new case ID in `scenarios/cases`, restart Web and register the facts. Re-importing the same facts records a duplicate attempt and leaves the existing assessment visible.
+With a fresh database, cases 001–003 and 005–009 start with their first-step facts and carry the label “loaded from test data, not read by the agent”. [Case 006](http://127.0.0.1:8080/cases/case-006) shows a supplier mismatch alongside a passing bank check. Case 008 is in Closed with a link to the original PDF. [Case 009](http://127.0.0.1:8080/cases/case-009) shows the differences from the counted original. Cases 004 and 010 start with company data and PDF references for the agent to read. To exercise a fresh registration, add a clean invoice under a new case ID in `scenarios/cases`, restart Web and register the facts. Re-importing the same facts records a duplicate attempt and leaves the existing assessment visible.
 
 The database is in the Compose `invoice-data` volume. `docker compose down` stops the app and preserves history. Use `docker compose down --volumes` to reset this project's volume. Case folders under `dataset/cases` and `scenarios/cases` are mounted read-only. The startup loader discovers new cases on restart and preserves existing revisions. The allow-list seeds facts only when a case is first loaded. A fresh demo volume loads the newly enabled cases automatically. Use the same case ID for the folder name, case manifest and first step. Startup reports malformed case data with the folder path. Own case folders use the assignment's case metadata and first-step layout.
 
@@ -34,9 +34,15 @@ The Streamable HTTP MCP endpoint is `http://127.0.0.1:8080/mcp`. For example, co
 }
 ```
 
-`open_case` returns source references and the extraction schema. The agent can resolve `host_path` from the repository root. `container_path` is the application's path inside Docker. `register_invoice` accepts the case ID, a source with `root` and `relative_path`, and the raw `facts` object. The server reads the selected PDF to compute SHA-256. The tools also expose the saved assessment, history, company data and an unchanged-input recheck. The demo is intended for loopback. A production deployment would need separate agent and human credentials and access controls.
+`open_case` returns source references and the extraction schema. The agent can resolve `host_path` from the repository root. `container_path` is the application's path inside Docker. `register_invoice` accepts the case ID, a source with `root` and `relative_path`, and the raw `facts` object. The server reads the selected PDF to compute SHA-256. The seven tools are `open_case`, `get_company_data`, `register_invoice`, `propose_match`, `assess_invoice`, `get_assessment`, and `get_case_history`. Company data is read-only for MCP. The workspace handles human confirmation. The demo is intended for loopback. A production deployment would need separate agent and human credentials and access controls.
 
 MCP registration requires a reason for each null fact and quotes for printed values only. The runner and startup accept schema-valid null facts without these reading-completeness checks. Intake returns validation errors with field paths for malformed facts, impossible calendar dates, and invalid evidence references. Rejected submissions leave history unchanged. The agent supplies the excerpts and page numbers. The page shows the saved text as quotations.
+
+### Review a proposed match
+
+With case 010 open, the agent reads and registers the invoice facts, then uses `get_company_data` to inspect orders and `propose_match` to submit an agent proposal. The proposal contains `proposal_id`, `actor: "agent"`, `document_id`, `order_id` and `line_matches` (each with `document_line_id` and `order_line_id`).
+
+Open the case page and select the proposal to review its line mapping and the assessment preview. Enter your name, acknowledge the supporting delivery documents and confirm. Confirmation saves the selected proposal and recalculates all rules. History shows who acted, the input revisions and versions, and the saved assessment for each result. Use Open the latest to return to the current case.
 
 ## Build and run the native adapter
 
@@ -46,10 +52,10 @@ Install the .NET SDK specified in [global.json](global.json) and Python 3 with `
 dotnet publish src/InvoiceDesk.Adapter -c Release --self-contained false -o dist/native
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001,case-002,case-003,case-004,case-005,case-006,case-007,case-008,case-009 --report-dir results/local/public --keep-state
+.venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --report-dir results/local/public --keep-state
 ```
 
-The supported subset is nine cases and nine steps. Reports go to `results/local/public/`. The adapter runs independently of Web and keeps its SQLite state under the supplied `--state-dir`. An initial step requires both company data and invoice facts. Input validation returns a field path. Unsupported rule branches exit with a diagnostic on stderr.
+The full public run covers ten cases and twelve steps. Reports go to `results/local/public/`. The adapter runs independently of Web and keeps its SQLite state under the supplied `--state-dir`. It applies supplied context, document, proposals and confirmations in that order and commits them as one revision. An invalid section leaves state untouched. An initial step needs both company data and invoice facts. Missing initial sections return `/context` or `/document` validation errors. Omitted sections on later steps keep the saved inputs.
 
 ### Simplifications
 
@@ -59,7 +65,13 @@ Identifiers are trimmed and uppercased while retaining separators and leading ze
 
 A business key is the resolved document supplier and buyer plus the normalized invoice number. The app checks every same-key record in supplied invoice history first, then earlier case imports. It resolves earlier imports against the current company data. It picks the first equal record as the original of a duplicate, or the first record for a conflict if all differ. Equality compares dates, currency, PO reference, IBAN, declared totals, and normalized line tuples as a multiset with exact decimal comparison. It ignores file/hash, descriptions, payment terms and line IDs/order. The supplied history format carries no payment terms. A changed re-import is assessed as a conflict and both versions remain available. Reassessing the active invoice saves a fresh assessment and excludes that version from its own conflict comparison. An equal history record arriving through a context update does not turn the active invoice into a duplicate. A duplicate advances history with its PDF reference and keeps the previous assessment current. A case with only a duplicate is Closed. When a runner step supplies company data with a duplicate, the new snapshot is retained for a later assessment. If those inputs changed, the previous result remains visible and the case requires attention before accounting.
 
-Order and line matching branches beyond the delivered deterministic paths, proposals and confirmations are scheduled for stage 03. The adapter and MCP report unsupported branches explicitly.
+An explicit PO reference can select a closed order. With an absent reference, automatic selection requires one open order for the resolved supplier and buyer (if resolved) with a distinct exact match for every line. An unknown printed reference needs a proposal. Exact line matches use SKU, description or an explicit alias; all lines in a contested match stay unresolved automatically.
+
+Deterministic links take priority. Confirmed proposals outrank unconfirmed proposals. The proposal most recently confirmed for the first time wins, followed by the most recently registered applicable unconfirmed proposal. Repeat submissions advance the revision. Repeating a proposal on the same import keeps its precedence. Repeating it after a changed re-import binds it to the new reading as an unconfirmed proposal. Reusing a proposal ID with different content is a validation error. A proposal is bound to its imported document and ceases to apply when its order or a referenced line disappears from the snapshot. A runner step can record confirmation while the proposal is unavailable. When the references return, that confirmation can apply again.
+
+A unit mismatch retains quantities in their source units. The two quantity comparisons and unit-price comparison are skipped for that line, and invoice arithmetic still runs.
+
+A combined duplicate step keeps other valid supplied inputs and returns the duplicate with no assessment. Changed inputs require reassessment before accounting. A case with only a duplicate can take a later context-only step and retain its duplicate disposition. Proposal validation requires a registered active document.
 
 ## Check a change
 

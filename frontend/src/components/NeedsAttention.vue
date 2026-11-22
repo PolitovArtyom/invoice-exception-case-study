@@ -72,6 +72,17 @@ function describe(check: InvoiceCheck) {
   const actual = check.actual
   const expected = check.expected
   if (check.status === 'unknown') {
+    if (check.code === 'ORDER_MATCH')
+      return {
+        detail: 'The invoice could not be matched to a single purchase order.',
+        guidance:
+          'Accounts payable can check the PO reference and supporting delivery documents.',
+      }
+    if (check.code === 'LINE_MATCH')
+      return {
+        detail: 'This invoice line has no unique order line match.',
+        guidance: 'Ask procurement to identify the matching order line.',
+      }
     if (check.code === 'QTY_RECEIVED')
       return {
         detail: 'Goods receipt data is unavailable.',
@@ -88,6 +99,24 @@ function describe(check: InvoiceCheck) {
   }
 
   switch (check.code) {
+    case 'ORDER_MATCH':
+      return {
+        detail: 'The selected order comes from an agent proposal.',
+        guidance:
+          'Accounts payable should verify the order against the delivery documents.',
+      }
+    case 'LINE_MATCH':
+      return actual?.unit?.value !== expected?.unit?.value
+        ? {
+            detail: `The invoice unit is ${actual?.unit?.value} and the order unit is ${expected?.unit?.value}.`,
+            guidance:
+              'Ask procurement to check the units on the order and invoice.',
+          }
+        : {
+            detail: 'The selected line comes from an agent proposal.',
+            guidance:
+              'Accounts payable should verify the line against the delivery documents.',
+          }
     case 'QTY_RECEIVED':
       return {
         detail: `Invoiced ${amount(actual?.quantity?.value)} ${actual?.unit?.value ?? ''}. Available to invoice from receipts is ${amount(expected?.available_to_invoice?.value)}.`,

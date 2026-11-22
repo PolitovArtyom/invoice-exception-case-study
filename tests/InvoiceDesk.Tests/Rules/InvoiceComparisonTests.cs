@@ -82,10 +82,12 @@ public sealed class InvoiceComparisonTests
             company.Suppliers.Suppliers[0],
             company.Buyers.Buyers[0],
             order,
+            MatchSource.Deterministic,
             [
                 new(
                     facts.Lines[0],
                     order.Lines[0],
+                    MatchSource.Deterministic,
                     LineMatchReason.Sku,
                     new(10.00m, 2.00m),
                     new(10m, 10m, 0m)

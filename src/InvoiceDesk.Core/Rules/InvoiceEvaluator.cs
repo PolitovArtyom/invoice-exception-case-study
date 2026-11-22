@@ -37,35 +37,21 @@ public sealed class InvoiceEvaluator
         int step,
         RevisionInputs inputs,
         InvoiceParties parties,
-        InvoiceImportMatch? importMatch
+        InvoiceImportMatch? importMatch,
+        ProposalMatches matching
     )
     {
         string documentId = inputs.Facts!.DocumentId;
-        var result = new InvoiceResult(
-            "1.0",
+        var disposition = importMatch is null ? ImportDisposition.New : ImportDisposition.Conflict;
+        var result = ImportResult(
             caseId,
             step,
-            CaseMetadata.PolicyVersion,
-            inputs.CompanyData.ContextVersion,
-            inputs.Number,
+            inputs,
             documentId,
-            importMatch is null ? ImportDisposition.New
-                : importMatch.IsDuplicate ? ImportDisposition.Duplicate
-                : ImportDisposition.Conflict,
-            importMatch?.Original.DocumentId,
-            importMatch is { IsDuplicate: true } ? importMatch.Original.AssessmentId : null,
-            null,
-            null,
-            [],
-            null,
-            [],
-            null,
-            []
+            disposition,
+            importMatch?.Original
         );
-        if (importMatch is { IsDuplicate: true })
-            return result;
-
-        var context = BuildContext(inputs, parties, importMatch);
+        var context = BuildContext(inputs, parties, importMatch, matching);
         var verdicts = DocumentChecks
             .Select(check => (check.Code, ObjectId: documentId, Verdict: check.Evaluate(context)))
             .Concat(
@@ -95,7 +81,7 @@ public sealed class InvoiceEvaluator
         return result with
         {
             MatchedOrderId = context.Order?.OrderId,
-            OrderMatchSource = context.Order is null ? null : MatchSource.Deterministic,
+            OrderMatchSource = context.OrderSource,
             Lines = context.Lines.Select(LineResult).ToArray(),
             Totals = context.Totals,
             Checks = checks,
@@ -106,18 +92,47 @@ public sealed class InvoiceEvaluator
         };
     }
 
+    internal static InvoiceResult ImportResult(
+        string caseId,
+        int step,
+        RevisionInputs inputs,
+        string documentId,
+        ImportDisposition disposition,
+        OriginalInvoice? original
+    ) =>
+        new(
+            "1.0",
+            caseId,
+            step,
+            CaseMetadata.PolicyVersion,
+            inputs.CompanyData.ContextVersion,
+            inputs.Number,
+            documentId,
+            disposition,
+            original?.DocumentId,
+            disposition == ImportDisposition.Duplicate ? original?.AssessmentId : null,
+            null,
+            null,
+            [],
+            null,
+            [],
+            null,
+            []
+        );
+
     private static CheckContext BuildContext(
         RevisionInputs inputs,
         InvoiceParties parties,
-        InvoiceImportMatch? importMatch
+        InvoiceImportMatch? importMatch,
+        ProposalMatches matching
     )
     {
         var facts = inputs.Facts!;
         var companyData = inputs.CompanyData;
-        var order = InvoiceMatches.FindOrder(facts, companyData);
+        var order = matching.Order;
 
         var lines = facts
-            .Lines.Zip(InvoiceMatches.FindLines(facts, order), (invoice, match) =>
+            .Lines.Zip(matching.Lines, (invoice, match) =>
             {
                 var quantities =
                     match is null || order is null
@@ -131,6 +146,7 @@ public sealed class InvoiceEvaluator
                 return new MatchedLine(
                     invoice,
                     match?.OrderLine,
+                    match?.Source,
                     match?.Reason,
                     LineAmounts.Calculate(invoice),
                     quantities
@@ -146,6 +162,7 @@ public sealed class InvoiceEvaluator
             parties.Supplier,
             parties.Buyer,
             order,
+            matching.OrderSource,
             lines,
             parties.Key,
             importMatch,
@@ -157,7 +174,7 @@ public sealed class InvoiceEvaluator
         new(
             line.Invoice.LineId,
             line.OrderLine?.LineId,
-            line.OrderLine is null ? null : MatchSource.Deterministic,
+            line.Source,
             line.Amounts.Net,
             line.Amounts.Tax,
             line.Quantities?.Ordered,

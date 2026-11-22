@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using ModelContextProtocol.Client;
@@ -55,10 +56,30 @@ internal static class InvoiceApiClient
             }
         );
 
+    public static ValueTask<CallToolResult> Propose(
+        McpClient client,
+        JsonNode proposal,
+        string caseId = CaseTestEnvironment.ReviewerCaseId
+    ) =>
+        client.CallToolAsync(
+            "propose_match",
+            new Dictionary<string, object?> { ["case_id"] = caseId, ["proposal"] = proposal }
+        );
+
+    public static Task<HttpResponseMessage> Confirm(
+        HttpClient browser,
+        string caseId,
+        JsonNode form
+    ) => browser.PostAsJsonAsync($"/api/cases/{caseId}/confirmations", form);
+
+    public static async Task<JsonNode> Body(HttpResponseMessage response) =>
+        JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+
     public static JsonNode Payload(CallToolResult result, bool isError = false)
     {
-        Assert.Equal(isError, result.IsError == true);
-        return JsonNode.Parse(Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text)!;
+        string payload = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+        Assert.True(isError == (result.IsError == true), payload);
+        return JsonNode.Parse(payload)!;
     }
 
     public static async Task<JsonNode> Read(HttpClient browser, string path)

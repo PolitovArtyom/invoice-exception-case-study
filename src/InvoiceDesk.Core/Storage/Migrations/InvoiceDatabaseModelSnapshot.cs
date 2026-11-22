@@ -37,6 +37,9 @@ namespace InvoiceDesk.Core.Storage.Migrations
                     b.Property<string>("OriginalInvoice")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Proposals")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Result")
                         .HasColumnType("TEXT");
 

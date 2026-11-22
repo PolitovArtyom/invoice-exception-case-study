@@ -10,35 +10,30 @@ internal sealed class LineMatchCheck : ILineCheck
     {
         var invoice = line.Invoice;
         var orderLine = line.OrderLine;
-        UnsupportedInvoiceCaseException.Require(
-            orderLine is not null,
-            Code,
-            $"without a unique one-to-one match for {invoice.LineId}"
-        );
-        UnsupportedInvoiceCaseException.Require(
-            invoice.Unit == orderLine.Unit,
-            Code,
-            $"with different units for {invoice.LineId}"
-        );
+        if (context.Order is null)
+            return Verdict.DependsOn(CheckCode.OrderMatch);
+        if (orderLine is null)
+            return Verdict.MissingFact(RequiredFact.LineMatch);
 
-        return Verdict.Pass(
-            new Comparison(
-                Actual:
-                [
-                    Operand.Invoice("sku", invoice.Sku),
-                    Operand.Invoice("description", invoice.Description),
-                    Operand.Invoice("unit", invoice.Unit),
-                    Operand.Calculated("match_reason", line.MatchReason),
-                ],
-                Expected:
-                [
-                    Operand.Order("order_line_id", orderLine.LineId),
-                    Operand.Order("sku", orderLine.Sku),
-                    Operand.Order("description", orderLine.Description),
-                    Operand.Order("explicit_aliases", orderLine.ExplicitAliases),
-                    Operand.Order("unit", orderLine.Unit),
-                ]
-            )
+        var comparison = new Comparison(
+            Actual:
+            [
+                Operand.Invoice("sku", invoice.Sku),
+                Operand.Invoice("description", invoice.Description),
+                Operand.Invoice("unit", invoice.Unit),
+                Operand.Calculated("match_reason", line.MatchReason),
+            ],
+            Expected:
+            [
+                Operand.Order("order_line_id", orderLine.LineId),
+                Operand.Order("sku", orderLine.Sku),
+                Operand.Order("description", orderLine.Description),
+                Operand.Order("explicit_aliases", orderLine.ExplicitAliases),
+                Operand.Order("unit", orderLine.Unit),
+            ]
         );
+        return line.Source == MatchSource.AgentProposal || invoice.Unit != orderLine.Unit
+            ? Verdict.Fail(Severity.NeedsReview, comparison)
+            : Verdict.Pass(comparison);
     }
 }

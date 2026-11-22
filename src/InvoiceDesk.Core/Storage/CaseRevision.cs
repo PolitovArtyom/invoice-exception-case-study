@@ -1,4 +1,5 @@
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Model.Proposals;
 using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Storage;
@@ -23,5 +24,9 @@ internal sealed class CaseRevision
 
     public DuplicateAttempt? DuplicateAttempt { get; init; }
 
+    public StoredProposals? Proposals { get; init; }
+
     public InvoiceResult? Result { get; init; }
 }
+
+internal sealed record StoredProposals(RegisteredProposal[] Items);

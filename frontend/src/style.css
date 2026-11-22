@@ -547,3 +547,88 @@ summary {
   white-space: pre-wrap;
   margin-right: 0.45rem;
 }
+
+.proposal-card,
+.confirmation-review,
+.confirmation-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.proposal-status,
+.confirmation-preview,
+.confirmation-checkbox {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.proposal-mapping {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
+.proposal-mapping > div {
+  padding: 0.7rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.confirmation-form {
+  justify-items: start;
+}
+
+.confirmation-review {
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.proposal-card select,
+.confirmation-form input:not([type='checkbox']),
+.confirmation-form button {
+  max-width: 100%;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #aa9064;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.confirmation-form button {
+  background: var(--sun);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.confirmation-form button:disabled {
+  background: var(--paper);
+  color: var(--muted);
+  cursor: default;
+}
+
+.revision-history {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.revision-history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 0.45rem 1rem;
+  padding: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.revision-history li > div {
+  flex: 1 1 16rem;
+}
+
+.selected-revision {
+  background: var(--paper);
+}

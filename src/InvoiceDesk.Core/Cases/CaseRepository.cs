@@ -46,7 +46,11 @@ public sealed class CaseRepository(InvoiceDatabase database)
         && database.Revisions.Any(row =>
             row.CaseId == invoiceCase.Id
             && row.Number == invoiceCase.CurrentRevision
-            && (row.SnapshotId != assessed.SnapshotId || row.DocumentId != assessed.DocumentId)
+            && (
+                row.SnapshotId != assessed.SnapshotId
+                || row.DocumentId != assessed.DocumentId
+                || row.Proposals != assessed.Proposals
+            )
         );
 
     internal CaseRevision ReadAssessmentOrLatestRevision(InvoiceCase invoiceCase) =>
@@ -143,6 +147,7 @@ public sealed class CaseRepository(InvoiceDatabase database)
             Snapshot = inputs.Snapshot,
             Document = inputs.Document,
             Result = result,
+            Proposals = inputs.Proposals.Length == 0 ? null : new(inputs.Proposals),
             OriginalInvoice = original,
             DuplicateAttempt = duplicate,
         };
