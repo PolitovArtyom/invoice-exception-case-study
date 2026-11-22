@@ -4,7 +4,9 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="JsonSchema.Net" />
     <InternalsVisibleTo Include="InvoiceDesk.Tests" />
-    <EmbeddedResource Include="Rules/Normalization/CaseFolding.txt" LogicalName="CaseFolding.txt" />
-    <EmbeddedResource Include="../../dataset/schemas/*.schema.json" LogicalName="Schemas.%(Filename)%(Extension)" />
+    <EmbeddedResource
+      Include="../../dataset/schemas/*.schema.json"
+      LogicalName="Schemas.%(Filename)%(Extension)"
+    />
   </ItemGroup>
 </Project>

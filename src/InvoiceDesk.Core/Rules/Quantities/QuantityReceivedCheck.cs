@@ -1,29 +1,40 @@
-using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Rules.Quantities;
 
-internal static class QuantityReceivedCheck
+internal sealed class QuantityReceivedCheck : ILineCheck
 {
-    private const string Code = "QTY_RECEIVED";
+    public CheckCode Code => CheckCode.QuantityReceived;
 
-    public static CheckOutcome Evaluate(InvoiceFacts facts, InvoiceLine line, int index, LineQuantities quantities)
+    public Verdict Evaluate(CheckContext context, MatchedLine line)
     {
-        if (quantities.Received is not decimal received || quantities.AvailableToInvoice is not decimal available)
-            throw new UnsupportedInvoiceCaseException($"{Code} without receipt data for {line.LineId}");
-        CheckOutcome.Require(InvoiceDecimal.Parse(line.Quantity) <= available, $"{Code} above availability for {line.LineId}");
+        var invoice = line.Invoice;
+        var quantities = line.Quantities;
+        UnsupportedInvoiceCaseException.Require(
+            quantities is { Received: not null, AvailableToInvoice: not null },
+            Code,
+            $"without receipt data for {invoice.LineId}"
+        );
+        UnsupportedInvoiceCaseException.Require(
+            invoice.Quantity <= quantities.AvailableToInvoice,
+            Code,
+            $"above availability for {invoice.LineId}"
+        );
 
-        return CheckOutcome.Pass(Code, line.LineId, facts,
-            new Dictionary<string, CheckOperand>
-            {
-                ["quantity"] = CheckOperand.Invoice(line.Quantity),
-                ["unit"] = CheckOperand.Invoice(line.Unit)
-            },
-            new Dictionary<string, CheckOperand>
-            {
-                ["received"] = CheckOperand.Receipts(InvoiceDecimal.Quantity(received)),
-                ["previously_invoiced"] = CheckOperand.History(InvoiceDecimal.Quantity(quantities.PreviouslyInvoiced)),
-                ["available_to_invoice"] = CheckOperand.Calculated(InvoiceDecimal.Quantity(available))
-            }, $"/lines/{index}/quantity", $"/lines/{index}/unit");
+        return Verdict.Pass(
+            new Comparison(
+                Actual:
+                [
+                    Operand.Invoice("quantity", invoice.Quantity),
+                    Operand.Invoice("unit", invoice.Unit),
+                ],
+                Expected:
+                [
+                    Operand.Receipts("received", quantities.Received.Value),
+                    Operand.History("previously_invoiced", quantities.PreviouslyInvoiced),
+                    Operand.Calculated("available_to_invoice", quantities.AvailableToInvoice.Value),
+                ]
+            )
+        );
     }
 }

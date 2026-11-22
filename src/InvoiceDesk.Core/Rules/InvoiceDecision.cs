@@ -4,17 +4,19 @@ namespace InvoiceDesk.Core.Rules;
 
 internal static class InvoiceDecision
 {
-    internal const string Clear = "clear";
-
-    public static string From(IReadOnlyList<InvoiceCheck> checks)
+    public static Decision From(IReadOnlyList<CheckResult> checks)
     {
-        if (checks.Any(check => check is { Status: "fail", Severity: "blocked" }))
-            return "blocked";
-        if (checks.Any(check => check.Status == "unknown"))
-            return "needs_information";
-        if (checks.Any(check => check is { Status: "fail", Severity: "needs_review" }))
-            return "needs_review";
+        if (checks.Any(check => check is { Status: CheckStatus.Fail, Severity: Severity.Blocked }))
+            return Decision.Blocked;
+        if (checks.Any(check => check.Status == CheckStatus.Unknown))
+            return Decision.NeedsInformation;
+        if (
+            checks.Any(check =>
+                check is { Status: CheckStatus.Fail, Severity: Severity.NeedsReview }
+            )
+        )
+            return Decision.NeedsReview;
 
-        return Clear;
+        return Decision.Clear;
     }
 }

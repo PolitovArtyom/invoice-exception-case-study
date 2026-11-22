@@ -6,8 +6,11 @@ internal sealed record LineAmounts(decimal Net, decimal Tax)
 {
     public static LineAmounts Calculate(InvoiceLine line)
     {
-        decimal net = InvoiceDecimal.RoundMoney(InvoiceDecimal.Parse(line.Quantity) * InvoiceDecimal.Parse(line.UnitNetPrice));
-        decimal tax = InvoiceDecimal.RoundMoney(net * InvoiceDecimal.Parse(line.TaxRate));
+        decimal net = RoundMoney(line.Quantity * line.UnitNetPrice);
+        decimal tax = RoundMoney(net * line.TaxRate);
         return new(net, tax);
     }
+
+    private static decimal RoundMoney(decimal value) =>
+        decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 }

@@ -14,7 +14,9 @@ internal static class PublicCases
     {
         string folder = Folder(caseId);
         var definition = JsonNode.Parse(File.ReadAllText(Path.Combine(folder, "case.json")))!;
-        return definition["steps"]!.AsArray().Select(step => Path.Combine(folder, step!["input"]!.GetValue<string>()));
+        return definition["steps"]!
+            .AsArray()
+            .Select(step => Path.Combine(folder, step!["input"]!.GetValue<string>()));
     }
 
     public static JsonObject ReadFirstStep(string caseId = CleanCase) =>

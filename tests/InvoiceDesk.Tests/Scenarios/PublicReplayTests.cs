@@ -1,8 +1,6 @@
 using System.Text.Json.Nodes;
-
 using InvoiceDesk.Core.Validation;
 using InvoiceDesk.Tests.Support;
-
 using RunnerAdapter = InvoiceDesk.Adapter.Adapter;
 
 namespace InvoiceDesk.Tests.Scenarios;
@@ -27,7 +25,12 @@ public sealed class PublicReplayTests
             int revision = result["input_revision"]!.GetValue<int>();
             Assert.True(revision > previousRevision);
             previousRevision = revision;
-            outcomes.Add((result["decision"]?.GetValue<string>(), result["import_disposition"]?.GetValue<string>()));
+            outcomes.Add(
+                (
+                    result["decision"]?.GetValue<string>(),
+                    result["import_disposition"]?.GetValue<string>()
+                )
+            );
         }
 
         Assert.Equal(("clear", "new"), Assert.Single(outcomes));
@@ -52,13 +55,18 @@ public sealed class PublicReplayTests
         var lines = facts["lines"]!.AsArray();
         while (lines.Count > 1)
             lines.RemoveAt(lines.Count - 1);
-        facts["evidence"] = new JsonArray(facts["evidence"]!.AsArray()
-            .Where(item =>
-            {
-                string path = item!["field_path"]!.GetValue<string>();
-                return !path.StartsWith("/lines/", StringComparison.Ordinal) || path.StartsWith("/lines/0/", StringComparison.Ordinal);
-            })
-            .Select(item => item!.DeepClone()).ToArray());
+        facts["evidence"] = new JsonArray(
+            facts["evidence"]!
+                .AsArray()
+                .Where(item =>
+                {
+                    string path = item!["field_path"]!.GetValue<string>();
+                    return !path.StartsWith("/lines/", StringComparison.Ordinal)
+                        || path.StartsWith("/lines/0/", StringComparison.Ordinal);
+                })
+                .Select(item => item!.DeepClone())
+                .ToArray()
+        );
 
         lines[0]!["quantity"] = "0.499";
         lines[0]!["unit_net_price"] = unitPrice;
@@ -68,7 +76,8 @@ public sealed class PublicReplayTests
         facts["declared_subtotal"] = declaredNet;
         facts["declared_tax_total"] = "0.00";
         facts["declared_total"] = declaredNet;
-        step["context"]!["purchase_orders"]!["orders"]![0]!["lines"]![0]!["unit_net_price"] = unitPrice;
+        step["context"]!["purchase_orders"]!["orders"]![0]!["lines"]![0]!["unit_net_price"] =
+            unitPrice;
 
         AssertRejectedWithoutRevision(step);
     }

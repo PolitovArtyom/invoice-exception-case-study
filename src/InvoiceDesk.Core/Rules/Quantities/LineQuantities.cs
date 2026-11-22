@@ -3,27 +3,43 @@ using InvoiceDesk.Core.Rules.Duplicates;
 
 namespace InvoiceDesk.Core.Rules.Quantities;
 
-internal sealed record LineQuantities(decimal Ordered, decimal? Received, decimal PreviouslyInvoiced)
+internal sealed record LineQuantities(
+    decimal Ordered,
+    decimal? Received,
+    decimal PreviouslyInvoiced
+)
 {
     public decimal? AvailableToInvoice => Received - PreviouslyInvoiced;
 
     public decimal RemainingOnOrder => Ordered - PreviouslyInvoiced;
 
-    public static LineQuantities Calculate(PurchaseOrder order, PurchaseOrderLine line,
-        CompanyData companyData, InvoiceBusinessKey key)
+    public static LineQuantities Calculate(
+        PurchaseOrder order,
+        PurchaseOrderLine line,
+        CompanyData companyData,
+        InvoiceBusinessKey key
+    )
     {
-        decimal previous = companyData.InvoiceHistory.Documents
-            .Where(invoice => invoice.Status == "counted" && invoice.MatchedOrderId == order.OrderId && !key.Matches(invoice))
+        decimal previous = companyData
+            .InvoiceHistory.Documents.Where(invoice =>
+                invoice.Status == PreviousInvoiceStatus.Counted
+                && invoice.MatchedOrderId == order.OrderId
+                && !key.Matches(invoice)
+            )
             .SelectMany(invoice => invoice.Lines)
             .Where(invoiceLine => invoiceLine.OrderLineId == line.LineId)
-            .Sum(invoiceLine => InvoiceDecimal.Parse(invoiceLine.Quantity));
+            .Sum(invoiceLine => invoiceLine.Quantity);
 
-        decimal? received = companyData.GoodsReceipts.Availability == "available"
-            ? companyData.GoodsReceipts.Receipts
-                .Where(receipt => receipt.OrderLineId == line.LineId && receipt.Status == "accepted")
-                .Sum(receipt => InvoiceDecimal.Parse(receipt.AcceptedQuantity))
-            : null;
+        decimal? received =
+            companyData.GoodsReceipts.Availability == ReceiptAvailability.Available
+                ? companyData
+                    .GoodsReceipts.Receipts.Where(receipt =>
+                        receipt.OrderLineId == line.LineId
+                        && receipt.Status == ReceiptStatus.Accepted
+                    )
+                    .Sum(receipt => receipt.AcceptedQuantity)
+                : null;
 
-        return new(InvoiceDecimal.Parse(line.Quantity), received, previous);
+        return new(line.Quantity, received, previous);
     }
 }

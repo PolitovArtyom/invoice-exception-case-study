@@ -9,14 +9,22 @@ internal static class JsonFields
     {
         foreach (string part in path.Split('/').Skip(1))
         {
-            string key = part.Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
+            string key = part.Replace("~1", "/", StringComparison.Ordinal)
+                .Replace("~0", "~", StringComparison.Ordinal);
             switch (node)
             {
                 case JsonObject obj when obj.TryGetPropertyValue(key, out var value):
                     node = value;
                     break;
-                case JsonArray array when int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out int index)
-                    && key == index.ToString(CultureInfo.InvariantCulture) && index < array.Count:
+                case JsonArray array
+                    when int.TryParse(
+                        key,
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out int index
+                    )
+                        && key == index.ToString(CultureInfo.InvariantCulture)
+                        && index < array.Count:
                     node = array[index];
                     break;
                 default:
@@ -30,5 +38,6 @@ internal static class JsonFields
     }
 
     public static string Escape(string key) =>
-        key.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+        key.Replace("~", "~0", StringComparison.Ordinal)
+            .Replace("/", "~1", StringComparison.Ordinal);
 }

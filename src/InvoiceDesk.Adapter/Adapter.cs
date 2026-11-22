@@ -1,12 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-
+using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Storage;
-using InvoiceDesk.Core.UseCases;
 using InvoiceDesk.Core.Validation;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace InvoiceDesk.Adapter;
@@ -18,7 +16,13 @@ public static class Adapter
         if (args is ["--state-dir", var stateDir] && !string.IsNullOrWhiteSpace(stateDir))
             return Run(stdin, stdout, stateDir);
 
-        return ValidationError(stdout, new InvoiceValidationException("/state-dir", "Usage: InvoiceDesk.Adapter --state-dir <directory>"));
+        return ValidationError(
+            stdout,
+            new InvoiceValidationException(
+                "/state-dir",
+                "Usage: InvoiceDesk.Adapter --state-dir <directory>"
+            )
+        );
     }
 
     public static int Run(TextReader stdin, TextWriter stdout, string stateDir)
@@ -63,23 +67,40 @@ public static class Adapter
             throw new UnsupportedInvoiceCaseException("proposals and confirmations");
 
         string caseId = input["case_id"]!.GetValue<string>();
-        string asOf = input["as_of"]!.GetValue<string>();
+        var asOf = IntakeValidation.ReadDate(input["as_of"]!.GetValue<string>(), "/as_of");
         int step = input["step"]!.GetValue<int>();
-        IntakeValidation.ValidateDate(asOf, "/as_of");
 
-        var companyData = input["context"] is { } context ? IntakeValidation.ReadCompanyData(context, "/context") : null;
+        var companyData = input["context"] is { } context
+            ? IntakeValidation.ReadCompanyData(context, "/context")
+            : null;
         var reading = input["document"] is { } document
-            ? new InvoiceReading(IntakeValidation.ReadFacts(document["facts"], "/document/facts"),
-                document["content_sha256"]!.GetValue<string>(), null, "runner")
+            ? new InvoiceReading(
+                IntakeValidation.ReadFacts(document["facts"], "/document/facts"),
+                document["content_sha256"]!.GetValue<string>(),
+                null,
+                "runner"
+            )
             : null;
 
         Directory.CreateDirectory(stateDir);
         var databasePath = Path.Combine(stateDir, "state.sqlite");
-        using var database = new InvoiceDatabase(new DbContextOptionsBuilder<InvoiceDatabase>()
-            .UseSqlite(InvoiceDatabase.ConnectionString(databasePath)).Options);
+        using var database = new InvoiceDatabase(
+            new DbContextOptionsBuilder<InvoiceDatabase>()
+                .UseSqlite(InvoiceDatabase.ConnectionString(databasePath))
+                .Options
+        );
         database.Database.Migrate();
-        var updates = new CaseUpdates(new CaseRepository(database), new InvoiceEvaluator(), TimeProvider.System);
-        var result = updates.SubmitCaseInputs(new(caseId, "assignment", asOf, []), step, companyData, reading);
+        var cases = new CaseService(
+            new CaseRepository(database),
+            new InvoiceEvaluator(),
+            TimeProvider.System
+        );
+        var result = cases.SubmitCaseInputs(
+            new(caseId, "assignment", asOf, []),
+            step,
+            companyData,
+            reading
+        );
 
         stdout.WriteLine(InvoiceJson.Write(result));
         Console.Error.WriteLine($"Saved {caseId} revision {result.InputRevision} via adapter.");
@@ -89,7 +110,9 @@ public static class Adapter
     private static int ValidationError(TextWriter stdout, InvoiceValidationException error)
     {
         stdout.WriteLine(InvoiceJson.Write(error.Response));
-        Console.Error.WriteLine($"Rejected adapter input ({error.Details.Count} validation errors).");
+        Console.Error.WriteLine(
+            $"Rejected adapter input ({error.Details.Count} validation errors)."
+        );
         return 2;
     }
 }

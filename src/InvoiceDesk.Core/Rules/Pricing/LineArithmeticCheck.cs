@@ -1,33 +1,38 @@
-using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Rules.Pricing;
 
-internal static class LineArithmeticCheck
+internal sealed class LineArithmeticCheck : ILineCheck
 {
-    private const string Code = "LINE_ARITHMETIC";
+    public CheckCode Code => CheckCode.LineArithmetic;
 
-    public static (LineAmounts Amounts, CheckOutcome Outcome) Evaluate(InvoiceFacts facts, InvoiceLine line, int index)
+    public Verdict Evaluate(CheckContext context, MatchedLine line)
     {
-        var amounts = LineAmounts.Calculate(line);
-        CheckOutcome.Require(amounts.Net == InvoiceDecimal.Parse(line.DeclaredNetAmount) &&
-            (line.DeclaredTaxAmount is null || amounts.Tax == InvoiceDecimal.Parse(line.DeclaredTaxAmount)),
-            $"{Code} with inconsistent declared amounts for {line.LineId}");
+        var invoice = line.Invoice;
+        var amounts = line.Amounts;
+        UnsupportedInvoiceCaseException.Require(
+            amounts.Net == invoice.DeclaredNetAmount
+                && (invoice.DeclaredTaxAmount is null || amounts.Tax == invoice.DeclaredTaxAmount),
+            Code,
+            $"with inconsistent declared amounts for {invoice.LineId}"
+        );
 
-        return (amounts, CheckOutcome.Pass(Code, line.LineId, facts,
-            new Dictionary<string, CheckOperand>
-            {
-                ["quantity"] = CheckOperand.Invoice(line.Quantity),
-                ["unit_net_price"] = CheckOperand.Invoice(line.UnitNetPrice),
-                ["tax_rate"] = CheckOperand.Invoice(line.TaxRate),
-                ["declared_net_amount"] = CheckOperand.Invoice(line.DeclaredNetAmount),
-                ["declared_tax_amount"] = CheckOperand.Invoice(line.DeclaredTaxAmount)
-            },
-            new Dictionary<string, CheckOperand>
-            {
-                ["calculated_net"] = CheckOperand.Calculated(InvoiceDecimal.Money(amounts.Net)),
-                ["calculated_tax"] = CheckOperand.Calculated(InvoiceDecimal.Money(amounts.Tax))
-            }, $"/lines/{index}/quantity", $"/lines/{index}/unit_net_price", $"/lines/{index}/tax_rate",
-            $"/lines/{index}/declared_net_amount", $"/lines/{index}/declared_tax_amount"));
+        return Verdict.Pass(
+            new Comparison(
+                Actual:
+                [
+                    Operand.Invoice("quantity", invoice.Quantity),
+                    Operand.Invoice("unit_net_price", invoice.UnitNetPrice),
+                    Operand.Invoice("tax_rate", invoice.TaxRate),
+                    Operand.Invoice("declared_net_amount", invoice.DeclaredNetAmount),
+                    Operand.Invoice("declared_tax_amount", invoice.DeclaredTaxAmount),
+                ],
+                Expected:
+                [
+                    Operand.Calculated("calculated_net", amounts.Net),
+                    Operand.Calculated("calculated_tax", amounts.Tax),
+                ]
+            )
+        );
     }
 }

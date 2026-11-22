@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-
 using Json.Schema;
 
 namespace InvoiceDesk.Core.Validation;
@@ -8,7 +7,10 @@ namespace InvoiceDesk.Core.Validation;
 public sealed class AssignmentSchemas
 {
     private readonly Dictionary<string, JsonSchema> _schemas = [];
-    private readonly EvaluationOptions _options = new() { OutputFormat = OutputFormat.Hierarchical };
+    private readonly EvaluationOptions _options = new()
+    {
+        OutputFormat = OutputFormat.Hierarchical,
+    };
 
     public static AssignmentSchemas Instance { get; } = new();
 
@@ -16,7 +18,11 @@ public sealed class AssignmentSchemas
     {
         var build = new BuildOptions();
         var assembly = typeof(AssignmentSchemas).Assembly;
-        foreach (string resource in assembly.GetManifestResourceNames().Where(name => name.StartsWith("Schemas.", StringComparison.Ordinal)))
+        foreach (
+            string resource in assembly
+                .GetManifestResourceNames()
+                .Where(name => name.StartsWith("Schemas.", StringComparison.Ordinal))
+        )
         {
             using var stream = assembly.GetManifestResourceStream(resource)!;
             using var reader = new StreamReader(stream);
@@ -54,7 +60,10 @@ public sealed class AssignmentSchemas
     {
         if (node is JsonObject obj)
         {
-            if (obj["$ref"]?.GetValue<string>() is string reference && reference.StartsWith("common.schema.json#", StringComparison.Ordinal))
+            if (
+                obj["$ref"]?.GetValue<string>() is string reference
+                && reference.StartsWith("common.schema.json#", StringComparison.Ordinal)
+            )
                 obj["$ref"] = reference["common.schema.json".Length..];
 
             foreach (var child in obj.Select(property => property.Value).OfType<JsonNode>())

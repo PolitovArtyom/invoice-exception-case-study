@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -25,7 +24,10 @@ internal sealed class CaseTestEnvironment : IDisposable
 
     public string AddReviewerCase()
     {
-        string folder = CopyCaseFolder(PublicCases.CleanCase, Path.Combine(ScenarioPath, "cases", ReviewerCaseId));
+        string folder = CopyCaseFolder(
+            PublicCases.CleanCase,
+            Path.Combine(ScenarioPath, "cases", ReviewerCaseId)
+        );
         string manifestPath = Path.Combine(folder, "case.json");
         var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))!;
         manifest["case_id"] = ReviewerCaseId;
@@ -36,19 +38,28 @@ internal sealed class CaseTestEnvironment : IDisposable
         firstStep["document"]!["facts"]!["number"] = "REVIEWER-FACTS-MUST-NOT-LOAD";
         File.WriteAllText(Path.Combine(folder, "steps", "step-001.json"), firstStep.ToJsonString());
         Directory.CreateDirectory(Path.Combine(folder, "expected"));
-        File.WriteAllText(Path.Combine(folder, "expected", "step-001.json"), "EXPECTED DATA MUST NOT BE READ");
+        File.WriteAllText(
+            Path.Combine(folder, "expected", "step-001.json"),
+            "EXPECTED DATA MUST NOT BE READ"
+        );
         return folder;
     }
 
     public WebApplicationFactory<Program> Start() =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["DatasetPath"] = DatasetPath,
-                ["ScenarioPath"] = ScenarioPath,
-                ["DatabasePath"] = DatabasePath,
-                ["Logging:LogLevel:Default"] = "Warning"
-            })));
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration(
+                (_, config) =>
+                    config.AddInMemoryCollection(
+                        new Dictionary<string, string?>
+                        {
+                            ["DatasetPath"] = DatasetPath,
+                            ["ScenarioPath"] = ScenarioPath,
+                            ["DatabasePath"] = DatabasePath,
+                            ["Logging:LogLevel:Default"] = "Warning",
+                        }
+                    )
+            )
+        );
 
     private static string CopyCaseFolder(string caseId, string destination)
     {

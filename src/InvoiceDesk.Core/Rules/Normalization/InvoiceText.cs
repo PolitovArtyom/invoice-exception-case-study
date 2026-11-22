@@ -6,11 +6,18 @@ internal static class InvoiceText
 
     public static bool SameName(string? left, string? right) => Name(left) == Name(right);
 
-    private static string? Name(string? value) => value is null
-        ? null
-        : UnicodeCaseFolding.Fold(string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)));
+    private static string? Name(string? value) =>
+        value is null
+            ? null
+            : string.Join(
+                    ' ',
+                    value.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                )
+                .ToLowerInvariant();
 
-    public static string? Iban(string? value) => value is null
-        ? null
-        : string.Concat(value.Where(character => !char.IsWhiteSpace(character))).ToUpperInvariant();
+    public static string? Iban(string? value) =>
+        value is null
+            ? null
+            : string.Concat(value.Where(character => !char.IsWhiteSpace(character)))
+                .ToUpperInvariant();
 }

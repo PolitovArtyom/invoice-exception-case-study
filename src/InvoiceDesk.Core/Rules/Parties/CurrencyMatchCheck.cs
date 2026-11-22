@@ -1,20 +1,26 @@
-using InvoiceDesk.Core.Model;
-using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Rules.Parties;
 
-internal static class CurrencyMatchCheck
+internal sealed class CurrencyMatchCheck : IDocumentCheck
 {
-    private const string Code = "CURRENCY_MATCH";
+    public CheckCode Code => CheckCode.CurrencyMatch;
 
-    public static CheckOutcome Evaluate(InvoiceFacts facts, PurchaseOrder order)
+    public Verdict Evaluate(CheckContext context)
     {
-        CheckOutcome.Require(facts.Currency == order.Currency, $"{Code} for an absent or different currency");
+        var order = context.Order;
+        string? currency = context.Facts.Currency;
+        UnsupportedInvoiceCaseException.Require(
+            order is not null && currency == order.Currency,
+            Code,
+            "for a missing order or an absent or different currency"
+        );
 
-        return CheckOutcome.Pass(Code, facts.DocumentId, facts,
-            new Dictionary<string, CheckOperand> { ["currency"] = CheckOperand.Invoice(facts.Currency) },
-            new Dictionary<string, CheckOperand> { ["currency"] = CheckOperand.Order(order.Currency) },
-            "/currency");
+        return Verdict.Pass(
+            new Comparison(
+                Actual: [Operand.Invoice("currency", currency)],
+                Expected: [Operand.Order("currency", order.Currency)]
+            )
+        );
     }
 }

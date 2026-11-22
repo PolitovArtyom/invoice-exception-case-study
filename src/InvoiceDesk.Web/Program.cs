@@ -1,30 +1,31 @@
+using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Storage;
-using InvoiceDesk.Core.UseCases;
 using InvoiceDesk.Web.Api;
 using InvoiceDesk.Web.CaseLoading;
 using InvoiceDesk.Web.Mcp;
-
 using Microsoft.EntityFrameworkCore;
-
 using ModelContextProtocol.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDbContext<InvoiceDatabase>((services, options) =>
-{
-    var config = services.GetRequiredService<IConfiguration>();
-    var environment = services.GetRequiredService<IWebHostEnvironment>();
-    string databasePath = config["DatabasePath"] ?? Path.Combine(environment.ContentRootPath, "invoice.sqlite");
-    options.UseSqlite(InvoiceDatabase.ConnectionString(databasePath));
-});
+builder.Services.AddDbContext<InvoiceDatabase>(
+    (services, options) =>
+    {
+        var config = services.GetRequiredService<IConfiguration>();
+        var environment = services.GetRequiredService<IWebHostEnvironment>();
+        string databasePath = config["DatabasePath"]
+            ?? Path.Combine(environment.ContentRootPath, "invoice.sqlite");
+        options.UseSqlite(InvoiceDatabase.ConnectionString(databasePath));
+    }
+);
 builder.Services.AddSingleton<InvoiceEvaluator>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CaseFolders>();
 builder.Services.AddScoped<CaseRepository>();
-builder.Services.AddScoped<CaseQueries>();
-builder.Services.AddScoped<CaseUpdates>();
+builder.Services.AddScoped<CaseService>();
 builder.Services.AddScoped<CaseLoader>();
-builder.Services.AddMcpServer()
+builder
+    .Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
     .WithTools<InvoiceTools>();
 
@@ -33,7 +34,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var database = scope.ServiceProvider.GetRequiredService<InvoiceDatabase>();
-    Directory.CreateDirectory(Path.GetDirectoryName(database.Database.GetDbConnection().DataSource)!);
+    Directory.CreateDirectory(
+        Path.GetDirectoryName(database.Database.GetDbConnection().DataSource)!
+    );
     database.Database.Migrate();
     scope.ServiceProvider.GetRequiredService<CaseLoader>().Load();
 }

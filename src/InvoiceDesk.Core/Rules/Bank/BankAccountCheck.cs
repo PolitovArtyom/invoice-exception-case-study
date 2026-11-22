@@ -1,24 +1,36 @@
-using InvoiceDesk.Core.Model;
-using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules.Normalization;
 
 namespace InvoiceDesk.Core.Rules.Bank;
 
-internal static class BankAccountCheck
+internal sealed class BankAccountCheck : IDocumentCheck
 {
-    private const string Code = "BANK_ACCOUNT";
+    public CheckCode Code => CheckCode.BankAccount;
 
-    public static CheckOutcome Evaluate(InvoiceFacts facts, Supplier supplier)
+    public Verdict Evaluate(CheckContext context)
     {
-        var approved = supplier.ApprovedBankAccounts.Select(account => account.Iban).ToArray();
-        CheckOutcome.Require(facts.Bank.Iban is not null &&
-            approved.Any(iban => InvoiceText.Iban(iban) == InvoiceText.Iban(facts.Bank.Iban)),
-            $"{Code} for an absent or unapproved account");
+        var supplier = context.Supplier;
+        UnsupportedInvoiceCaseException.Require(
+            supplier is not null,
+            Code,
+            "without a resolved supplier"
+        );
 
-        return CheckOutcome.Pass(Code, facts.DocumentId, facts,
-            new Dictionary<string, CheckOperand> { ["iban"] = CheckOperand.Invoice(facts.Bank.Iban) },
-            new Dictionary<string, CheckOperand> { ["approved_accounts"] = CheckOperand.Company(approved) },
-            "/bank/iban");
+        string? iban = context.Facts.Bank.Iban;
+        string? normalized = InvoiceText.Iban(iban);
+        var approved = supplier.ApprovedBankAccounts.Select(account => account.Iban).ToArray();
+        UnsupportedInvoiceCaseException.Require(
+            normalized is not null
+                && approved.Any(account => InvoiceText.Iban(account) == normalized),
+            Code,
+            "for an absent or unapproved account"
+        );
+
+        return Verdict.Pass(
+            new Comparison(
+                Actual: [Operand.Invoice("iban", iban)],
+                Expected: [Operand.Directory("approved_accounts", approved)]
+            )
+        );
     }
 }

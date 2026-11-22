@@ -8,7 +8,7 @@ public sealed class LineAmountsTests
     [Fact]
     public void Should_calculate_tax_on_rounded_net_when_unrounded_net_would_change_the_tax()
     {
-        var line = new InvoiceLine("L01", "Tape", "TAPE", "0.5", "m", "2.01", "1.01", "0.5", "0.51");
+        var line = new InvoiceLine("L01", "Tape", "TAPE", 0.5m, "m", 2.01m, 1.01m, 0.5m, 0.51m);
 
         var amounts = LineAmounts.Calculate(line);
 

@@ -21,6 +21,13 @@ export interface InvoiceFacts {
   supplier: { legal_name: string | null }
   buyer: { legal_name: string | null }
   declared_total: string
+  evidence: InvoiceEvidence[]
+}
+
+export interface InvoiceEvidence {
+  field_path: string
+  page: number
+  excerpt: string
 }
 
 export interface InvoiceResult {

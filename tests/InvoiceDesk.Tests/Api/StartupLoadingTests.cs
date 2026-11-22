@@ -1,7 +1,5 @@
 using System.Text.Json.Nodes;
-
 using InvoiceDesk.Tests.Support;
-
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
 
 namespace InvoiceDesk.Tests.Api;
@@ -32,13 +30,25 @@ public sealed class StartupLoadingTests
     private static async Task AssertStartupCases(HttpClient page)
     {
         var list = (await Read(page, "/api/cases")).AsArray();
-        Assert.Equal(new[] { "case-001", "case-002", "case-004", "case-010" },
-            list.Select(row => row!["case_id"]!.GetValue<string>()));
+        Assert.Equal(
+            new[] { "case-001", "case-002", "case-004", "case-010" },
+            list.Select(row => row!["case_id"]!.GetValue<string>())
+        );
         var clean = (await Read(page, "/api/cases/case-001"))["revision"]!;
-        Assert.Equal("loaded from test data, not read by the agent", clean["document"]!["reading_origin"]!.GetValue<string>());
+        Assert.Equal(
+            "loaded from test data, not read by the agent",
+            clean["document"]!["reading_origin"]!.GetValue<string>()
+        );
         CleanAssessment.AssertResult(clean["result"]!, 1);
 
-        foreach (var (id, version) in new[] { ("case-002", "CTX-002-v1"), ("case-004", "CTX-004-v1"), ("case-010", "CTX-010-v1") })
+        foreach (
+            var (id, version) in new[]
+            {
+                ("case-002", "CTX-002-v1"),
+                ("case-004", "CTX-004-v1"),
+                ("case-010", "CTX-010-v1"),
+            }
+        )
         {
             var pending = await Read(page, $"/api/cases/{id}");
             Assert.Null(pending["revision"]!["document"]);
@@ -70,12 +80,31 @@ public sealed class StartupLoadingTests
         var source = Assert.Single(opened["sources"]!.AsArray())!;
         Assert.True(source["available"]!.GetValue<bool>());
         Assert.Equal("own", source["root"]!.GetValue<string>());
-        Assert.Equal("scenarios/cases/case-911/documents/document-001.pdf", source["host_path"]!.GetValue<string>());
-        Assert.Equal(Path.Combine(environment.ScenarioPath, "cases", "case-911", "documents", "document-001.pdf"),
-            source["container_path"]!.GetValue<string>());
+        Assert.Equal(
+            "scenarios/cases/case-911/documents/document-001.pdf",
+            source["host_path"]!.GetValue<string>()
+        );
+        Assert.Equal(
+            Path.Combine(
+                environment.ScenarioPath,
+                "cases",
+                "case-911",
+                "documents",
+                "document-001.pdf"
+            ),
+            source["container_path"]!.GetValue<string>()
+        );
         Assert.Equal("CTX-001-v1", pending["revision"]!["context_version"]!.GetValue<string>());
-        Assert.DoesNotContain("REVIEWER-FACTS-MUST-NOT-LOAD", opened.ToJsonString(), StringComparison.Ordinal);
-        Assert.DoesNotContain("EXPECTED DATA MUST NOT BE READ", opened.ToJsonString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "REVIEWER-FACTS-MUST-NOT-LOAD",
+            opened.ToJsonString(),
+            StringComparison.Ordinal
+        );
+        Assert.DoesNotContain(
+            "EXPECTED DATA MUST NOT BE READ",
+            opened.ToJsonString(),
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
@@ -86,7 +115,9 @@ public sealed class StartupLoadingTests
         environment.AddReviewerCase();
         string malformed = Path.Combine(environment.ScenarioPath, "cases", "case-900");
         Directory.CreateDirectory(malformed);
-        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(PublicCases.Folder(PublicCases.CleanCase), "case.json")))!;
+        var manifest = JsonNode.Parse(
+            File.ReadAllText(Path.Combine(PublicCases.Folder(PublicCases.CleanCase), "case.json"))
+        )!;
         manifest["case_id"] = "case-900";
         File.WriteAllText(Path.Combine(malformed, "case.json"), manifest.ToJsonString());
 
@@ -94,6 +125,9 @@ public sealed class StartupLoadingTests
         using var page = app.CreateClient();
 
         var cases = (await Read(page, "/api/cases")).AsArray();
-        Assert.Equal(new[] { "case-001", "case-911" }, cases.Select(item => item!["case_id"]!.GetValue<string>()));
+        Assert.Equal(
+            new[] { "case-001", "case-911" },
+            cases.Select(item => item!["case_id"]!.GetValue<string>())
+        );
     }
 }

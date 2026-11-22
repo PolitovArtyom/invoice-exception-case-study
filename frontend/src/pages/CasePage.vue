@@ -102,6 +102,17 @@ onMounted(async () => {
     <template v-if="result">
       <InvoiceTotals :totals="result.totals" :currency="facts?.currency" />
       <ChecksTable :checks="result.checks" />
+      <details v-if="facts?.evidence.length" class="card">
+        <summary>Invoice evidence</summary>
+        <dl class="operands">
+          <div v-for="(citation, index) in facts.evidence" :key="index">
+            <dt>
+              <code>{{ citation.field_path }}</code> · Page {{ citation.page }}
+            </dt>
+            <dd>{{ citation.excerpt }}</dd>
+          </div>
+        </dl>
+      </details>
     </template>
     <p v-else class="waiting-note">The agent has not read this invoice yet.</p>
   </template>

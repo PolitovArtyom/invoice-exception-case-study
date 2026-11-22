@@ -49,13 +49,20 @@ python3 -m venv .venv
 
 The supported subset is one case and one step. Reports go to `results/local/public/`. The adapter runs independently of Web and keeps its SQLite state under the supplied `--state-dir`. An initial step requires both company data and invoice facts. Input validation returns a field path. Unsupported rule branches exit with a diagnostic on stderr.
 
+### Simplifications
+
 Each input quantity, unit price and monetary amount is limited to 1,000,000,000 to keep decimal products exact. Larger values return an unsupported-input error.
+
+Names are trimmed, internal whitespace collapses to one space, and casing uses `ToLowerInvariant()`. A mismatch when a name is needed for a match calls for clarification. Stage 00 reports that branch as unsupported.
 
 ## Check a change
 
 ```sh
+dotnet tool restore
 dotnet build InvoiceDesk.slnx -c Release
-dotnet format InvoiceDesk.slnx --verify-no-changes
+dotnet csharpier check .
+dotnet format style InvoiceDesk.slnx --verify-no-changes
+dotnet format analyzers InvoiceDesk.slnx --verify-no-changes
 dotnet test InvoiceDesk.slnx -c Release --no-build
 cd frontend
 npm ci

@@ -8,19 +8,18 @@ public sealed class InvoiceDecisionTests
     [Fact]
     public void Should_follow_core_v1_priority_when_checks_have_mixed_statuses()
     {
-        var passed = CreateCheck("pass");
-        var notApplicable = CreateCheck("not_applicable");
-        var review = CreateCheck("fail", "needs_review");
-        var unknown = CreateCheck("unknown");
-        var blocked = CreateCheck("fail", "blocked");
+        var passed = CreateCheck(CheckStatus.Pass);
+        var notApplicable = CreateCheck(CheckStatus.NotApplicable);
+        var review = CreateCheck(CheckStatus.Fail, Severity.NeedsReview);
+        var unknown = CreateCheck(CheckStatus.Unknown);
+        var blocked = CreateCheck(CheckStatus.Fail, Severity.Blocked);
 
-        Assert.Equal("blocked", InvoiceDecision.From([review, unknown, blocked]));
-        Assert.Equal("needs_information", InvoiceDecision.From([review, unknown]));
-        Assert.Equal("needs_review", InvoiceDecision.From([passed, review]));
-        Assert.Equal("clear", InvoiceDecision.From([passed, notApplicable]));
+        Assert.Equal(Decision.Blocked, InvoiceDecision.From([review, unknown, blocked]));
+        Assert.Equal(Decision.NeedsInformation, InvoiceDecision.From([review, unknown]));
+        Assert.Equal(Decision.NeedsReview, InvoiceDecision.From([passed, review]));
+        Assert.Equal(Decision.Clear, InvoiceDecision.From([passed, notApplicable]));
     }
 
-    private static InvoiceCheck CreateCheck(string status, string? severity = null) =>
-        new("SYNTHETIC", "DOC", status, severity, null,
-            new Dictionary<string, CheckOperand>(), new Dictionary<string, CheckOperand>(), []);
+    private static CheckResult CreateCheck(CheckStatus status, Severity? severity = null) =>
+        new(CheckCode.BankAccount, "DOC", status, severity, null, [], []);
 }

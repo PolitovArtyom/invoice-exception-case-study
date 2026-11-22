@@ -11,7 +11,7 @@ COPY global.json Directory.Build.props Directory.Packages.props ./
 COPY dataset/schemas/ dataset/schemas/
 COPY src/InvoiceDesk.Core/ src/InvoiceDesk.Core/
 COPY src/InvoiceDesk.Web/ src/InvoiceDesk.Web/
-RUN dotnet restore src/InvoiceDesk.Web --locked-mode
+RUN dotnet restore src/InvoiceDesk.Web
 COPY --from=frontend /source/frontend/dist/ src/InvoiceDesk.Web/wwwroot/
 RUN dotnet publish src/InvoiceDesk.Web -c Release --no-restore -o /publish
 

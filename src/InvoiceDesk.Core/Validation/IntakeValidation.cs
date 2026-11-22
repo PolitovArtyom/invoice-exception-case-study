@@ -1,52 +1,66 @@
-using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
-
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.Json;
 using InvoiceDesk.Core.Rules;
 
 namespace InvoiceDesk.Core.Validation;
 
 public static class IntakeValidation
 {
-    private const decimal MaximumSupportedMagnitude = 1_000_000_000m;
-
-    private static readonly HashSet<string> DecimalFields =
-    [
-        "quantity", "accepted_quantity", "unit_net_price", "tax_rate", "declared_net_amount",
-        "declared_tax_amount", "declared_subtotal", "declared_tax_total", "declared_total"
-    ];
-
     public static InvoiceFacts ReadFacts(JsonNode? json, string prefix)
     {
-        AssignmentSchemas.Instance.Validate("extraction", json, prefix);
-        ValidateValues(json, prefix);
-        var facts = InvoiceJson.Read<InvoiceFacts>(json!.ToJsonString());
-        RequireUnique(facts.Lines.Select(line => line.LineId), prefix + "/lines", "invoice line ID");
+        var facts = Read<InvoiceFacts>("extraction", json, prefix);
+        RequireUnique(
+            facts.Lines.Select(line => line.LineId),
+            prefix + "/lines",
+            "invoice line ID"
+        );
 
         var missingPaths = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (missing, index) in facts.MissingFields.Select((field, index) => (field, index)))
+        foreach (
+            var (missing, index) in facts.MissingFields.Select((field, index) => (field, index))
+        )
         {
-            if (!JsonFields.TryResolve(json, missing.FieldPath, out var value) || value is not null ||
-                !missingPaths.Add(missing.FieldPath))
-                throw new InvoiceValidationException($"{prefix}/missing_fields/{index}/field_path", "Expected a unique reference to a null invoice field.");
+            if (
+                !JsonFields.TryResolve(json!, missing.FieldPath, out var value)
+                || value is not null
+                || !missingPaths.Add(missing.FieldPath)
+            )
+                throw new InvoiceValidationException(
+                    $"{prefix}/missing_fields/{index}/field_path",
+                    "Expected a unique reference to a null invoice field."
+                );
         }
 
         foreach (string path in NullFields(json, ""))
         {
             if (!missingPaths.Contains(path))
-                throw new InvoiceValidationException(prefix + path, "A null invoice field requires a missing reason.");
+                throw new InvoiceValidationException(
+                    prefix + path,
+                    "A null invoice field requires a missing reason."
+                );
         }
 
         foreach (var (evidence, index) in facts.Evidence.Select((item, index) => (item, index)))
         {
             if (evidence.DocumentId != facts.DocumentId)
-                throw new InvoiceValidationException($"{prefix}/evidence/{index}/document_id", "Must reference this invoice document.");
+                throw new InvoiceValidationException(
+                    $"{prefix}/evidence/{index}/document_id",
+                    "Must reference this invoice document."
+                );
             string fieldPath = evidence.FieldPath;
-            if (fieldPath.StartsWith("/evidence/", StringComparison.Ordinal) ||
-                fieldPath.StartsWith("/missing_fields/", StringComparison.Ordinal) ||
-                !JsonFields.TryResolve(json, fieldPath, out var value) || value is not JsonValue)
-                throw new InvoiceValidationException($"{prefix}/evidence/{index}/field_path", "Must reference a printed invoice field.");
+            if (
+                fieldPath.StartsWith("/evidence/", StringComparison.Ordinal)
+                || fieldPath.StartsWith("/missing_fields/", StringComparison.Ordinal)
+                || !JsonFields.TryResolve(json!, fieldPath, out var value)
+                || value is not JsonValue
+            )
+                throw new InvoiceValidationException(
+                    $"{prefix}/evidence/{index}/field_path",
+                    "Must reference a printed invoice field."
+                );
         }
 
         return facts;
@@ -54,56 +68,63 @@ public static class IntakeValidation
 
     public static CompanyData ReadCompanyData(JsonNode? json, string prefix)
     {
-        AssignmentSchemas.Instance.Validate("context", json, prefix);
-        ValidateValues(json, prefix);
-        var snapshot = InvoiceJson.Read<CompanyData>(json!.ToJsonString());
-        RequireUnique(snapshot.PurchaseOrders.Orders.SelectMany(order => order.Lines).Select(line => line.LineId),
-            prefix + "/purchase_orders/orders", "order line ID");
+        var snapshot = Read<CompanyData>("context", json, prefix);
+        RequireUnique(
+            snapshot
+                .PurchaseOrders.Orders.SelectMany(order => order.Lines)
+                .Select(line => line.LineId),
+            prefix + "/purchase_orders/orders",
+            "order line ID"
+        );
         return snapshot;
     }
 
-    public static void ValidateDate(string value, string path)
-    {
-        if (!DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
-            throw new InvoiceValidationException(path, "Expected a calendar date in YYYY-MM-DD format.");
-    }
+    public static DateOnly ReadDate(string? value, string path) =>
+        CalendarDateConverter.TryRead(value, out var date)
+            ? date
+            : throw new InvoiceValidationException(path, CalendarDateConverter.InvalidDateMessage);
 
-    private static void ValidateValues(JsonNode? node, string path)
+    public static T Read<T>(string schema, JsonNode? json, string prefix = "")
     {
-        if (node is JsonArray array)
+        AssignmentSchemas.Instance.Validate(schema, json, prefix);
+        try
         {
-            for (int index = 0; index < array.Count; index++)
-                ValidateValues(array[index], $"{path}/{index}");
+            return InvoiceJson.ReadInput<T>(json!);
         }
-        else if (node is JsonObject obj)
+        catch (AmountLimitException error)
         {
-            foreach (var (field, value) in obj)
-            {
-                string fieldPath = path + "/" + field;
-                if (value is JsonValue text && field is "issue_date" or "due_date" or "accepted_at")
-                    ValidateDate(text.GetValue<string>(), fieldPath);
-                else if (value is JsonValue number && DecimalFields.Contains(field))
-                    ValidateDecimal(number.GetValue<string>(), fieldPath);
-                else
-                    ValidateValues(value, fieldPath);
-            }
+            throw UnsupportedInvoiceCaseException.AmountAboveLimit(
+                InputDecimalStringConverter.MaximumSupportedMagnitude,
+                Pointer(error, prefix)
+            );
+        }
+        catch (JsonException error)
+        {
+            throw new InvoiceValidationException(Pointer(error, prefix), error.Message);
         }
     }
 
-    private static void ValidateDecimal(string text, string path)
+    private static string Pointer(JsonException error, string prefix)
     {
-        if (!decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value) ||
-            value > MaximumSupportedMagnitude)
-            throw UnsupportedInvoiceCaseException.AmountAboveLimit(MaximumSupportedMagnitude, path);
+        string[] fields = (error.Path ?? "$").Split(
+            ['$', '.', '[', ']'],
+            StringSplitOptions.RemoveEmptyEntries
+        );
+        return prefix + string.Concat(fields.Select(field => "/" + JsonFields.Escape(field)));
     }
 
-    private static IEnumerable<string> NullFields(JsonNode? node, string path) => node switch
-    {
-        JsonObject obj => obj.SelectMany(field => NullFields(field.Value, path + "/" + JsonFields.Escape(field.Key))),
-        JsonArray array => array.SelectMany((value, index) => NullFields(value, $"{path}/{index}")),
-        null => [path],
-        _ => []
-    };
+    private static IEnumerable<string> NullFields(JsonNode? node, string path) =>
+        node switch
+        {
+            JsonObject obj => obj.SelectMany(field =>
+                NullFields(field.Value, path + "/" + JsonFields.Escape(field.Key))
+            ),
+            JsonArray array => array.SelectMany(
+                (value, index) => NullFields(value, $"{path}/{index}")
+            ),
+            null => [path],
+            _ => [],
+        };
 
     private static void RequireUnique(IEnumerable<string> values, string path, string label)
     {

@@ -1,37 +1,53 @@
-using InvoiceDesk.Core.Model;
-using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
+using InvoiceDesk.Core.Rules.Matching;
 using InvoiceDesk.Core.Rules.Normalization;
-using InvoiceDesk.Core.Rules.Parties;
 
 namespace InvoiceDesk.Core.Rules.Duplicates;
 
-internal static class DocumentConflictCheck
+internal sealed class DocumentConflictCheck : IDocumentCheck
 {
-    private const string Code = "DOCUMENT_CONFLICT";
+    public CheckCode Code => CheckCode.DocumentConflict;
 
-    public static (string ImportDisposition, CheckOutcome Outcome) Evaluate(InvoiceFacts facts, CompanyData companyData, InvoiceBusinessKey key,
-        IReadOnlyList<EarlierInvoice> earlierImports)
+    public Verdict Evaluate(CheckContext context)
     {
-        var historyMatches = companyData.InvoiceHistory.Documents.Where(key.Matches).Select(invoice => invoice.DocumentId).ToArray();
-        var earlierMatches = earlierImports.Where(invoice => Matches(invoice, key)).Select(invoice => invoice.Facts.DocumentId).ToArray();
-        CheckOutcome.Require(historyMatches.Length == 0 && earlierMatches.Length == 0,
-            $"{Code} for a previously imported or counted invoice with the same business key");
+        var key = context.BusinessKey;
+        UnsupportedInvoiceCaseException.Require(
+            key is not null,
+            Code,
+            "without a resolved business key"
+        );
 
-        return ("new", CheckOutcome.Pass(Code, facts.DocumentId, facts,
-            new Dictionary<string, CheckOperand>
-            {
-                ["invoice_number"] = CheckOperand.Invoice(facts.Number),
-                ["business_key"] = CheckOperand.Calculated(key),
-                ["counted_matches"] = CheckOperand.Calculated(historyMatches),
-                ["earlier_import_matches"] = CheckOperand.Calculated(earlierMatches)
-            },
-            new Dictionary<string, CheckOperand> { ["prior_matches"] = CheckOperand.Policy("none") },
-            "/number", "/supplier/registration_id", "/buyer/registration_id", "/buyer/legal_name"));
+        var previousInvoiceMatches = context
+            .PreviousInvoices.Where(key.Matches)
+            .Select(invoice => invoice.DocumentId)
+            .ToArray();
+        var earlierMatches = context
+            .EarlierImports.Where(invoice => Matches(invoice, key))
+            .Select(invoice => invoice.Facts.DocumentId)
+            .ToArray();
+        UnsupportedInvoiceCaseException.Require(
+            previousInvoiceMatches.Length == 0 && earlierMatches.Length == 0,
+            Code,
+            "for a previous invoice or earlier import with the same business key"
+        );
+
+        return Verdict.Pass(
+            new Comparison(
+                Actual:
+                [
+                    Operand.Invoice("invoice_number", context.Facts.Number),
+                    Operand.Calculated("business_key", key),
+                    Operand.Calculated("previous_invoice_matches", previousInvoiceMatches),
+                    Operand.Calculated("earlier_import_matches", earlierMatches),
+                ],
+                Expected: [Operand.Policy("prior_matches", "none")]
+            )
+        );
     }
 
     private static bool Matches(EarlierInvoice invoice, InvoiceBusinessKey key) =>
-        InvoiceText.Identifier(invoice.Facts.Number) == key.Number &&
-        SupplierIdentityCheck.Resolve(invoice.Facts, invoice.CompanyData)?.SupplierId == key.SupplierId &&
-        BuyerIdentityCheck.Resolve(invoice.Facts, invoice.CompanyData)?.BuyerId == key.BuyerId;
+        InvoiceText.Identifier(invoice.Facts.Number) == key.Number
+        && InvoiceMatches.FindSupplier(invoice.Facts, invoice.CompanyData)?.SupplierId
+            == key.SupplierId
+        && InvoiceMatches.FindBuyer(invoice.Facts, invoice.CompanyData)?.BuyerId == key.BuyerId;
 }

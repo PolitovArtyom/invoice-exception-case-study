@@ -1,0 +1,115 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Build Release
+        run: dotnet build InvoiceDesk.slnx -c Release
+      - name: Check CSharpier formatting
+        run: |
+          dotnet tool restore
+          dotnet csharpier check .
+      - name: Verify .NET style and analyzers
+        run: |
+          dotnet format style InvoiceDesk.slnx --verify-no-changes --no-restore
+          dotnet format analyzers InvoiceDesk.slnx --verify-no-changes --no-restore
+      - name: Run tests
+        id: tests
+        run: dotnet test InvoiceDesk.slnx -c Release --no-build --logger trx --results-directory TestResults
+      - name: Summarize tests
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          from collections import Counter
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          reports = list(Path("TestResults").glob("*.trx"))
+          if not reports:
+              raise SystemExit("No test results were written.")
+
+          totals = Counter()
+          for report in reports:
+              counters = ElementTree.parse(report).find("./{*}ResultSummary/{*}Counters")
+              totals.update({name: int(value) for name, value in counters.attrib.items()})
+
+          print("### .NET test results")
+          print()
+          print("| Total | Passed | Failed | Skipped |")
+          print("| ---: | ---: | ---: | ---: |")
+          print(f"| {totals['total']} | {totals['passed']} | {totals['failed']} | {totals['notExecuted']} |")
+          PY
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.3'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Check Prettier formatting
+        run: npm run format:check
+      - name: Build
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compose smoke
+        run: |
+          docker compose up --build --wait
+          curl --fail --silent --show-error http://127.0.0.1:8080/health | jq -e '.status == "ok"'
+      - name: Stop Compose
+        if: always()
+        run: docker compose down
+
+  runner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Publish native adapter
+        run: dotnet publish src/InvoiceDesk.Adapter -c Release --self-contained false -o dist/native
+      - name: Run the public acceptance subset
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001 --report-dir results/ci/public
+          jq -e '.summary | .cases_total == 1 and .cases_passed == 1 and .steps_total == 1 and .steps_passed == 1 and .adapter_failures == 0 and .critical_false_clear == 0' results/ci/public/eval-report.json
+      - name: Upload public runner report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: public-runner-report
+          path: results/ci/public/eval-report.*

@@ -1,5 +1,5 @@
+using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
-using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules.Bank;
 using InvoiceDesk.Core.Rules.Duplicates;
@@ -8,62 +8,171 @@ using InvoiceDesk.Core.Rules.Parties;
 using InvoiceDesk.Core.Rules.Pricing;
 using InvoiceDesk.Core.Rules.Quantities;
 
-using InvoiceDesk.Core.UseCases;
-
 namespace InvoiceDesk.Core.Rules;
 
 public sealed class InvoiceEvaluator
 {
-    internal InvoiceResult Evaluate(string caseId, int step, RevisionInputs inputs, IReadOnlyList<EarlierInvoice> earlierImports)
+    private static readonly IDocumentCheck[] DocumentChecks =
+    [
+        new OrderMatchCheck(),
+        new SupplierIdentityCheck(),
+        new BuyerIdentityCheck(),
+        new DocumentConflictCheck(),
+        new CurrencyMatchCheck(),
+        new TotalsArithmeticCheck(),
+        new BankAccountCheck(),
+    ];
+
+    private static readonly ILineCheck[] LineChecks =
+    [
+        new LineMatchCheck(),
+        new QuantityReceivedCheck(),
+        new QuantityOrderRemainingCheck(),
+        new UnitPriceCheck(),
+        new LineArithmeticCheck(),
+    ];
+
+    internal InvoiceResult Evaluate(
+        string caseId,
+        int step,
+        RevisionInputs inputs,
+        IReadOnlyList<EarlierInvoice> earlierImports
+    )
+    {
+        var context = BuildContext(inputs, earlierImports);
+        string documentId = context.Facts.DocumentId;
+        var verdicts = DocumentChecks
+            .Select(check => (check.Code, ObjectId: documentId, Verdict: check.Evaluate(context)))
+            .Concat(
+                context.Lines.SelectMany(line =>
+                    LineChecks.Select(check =>
+                        (
+                            check.Code,
+                            ObjectId: line.Invoice.LineId,
+                            Verdict: check.Evaluate(context, line)
+                        )
+                    )
+                )
+            )
+            .ToArray();
+        var checks = verdicts
+            .Select(item => new CheckResult(
+                item.Code,
+                item.ObjectId,
+                item.Verdict.Status,
+                item.Verdict.Severity,
+                item.Verdict.Dependency,
+                item.Verdict.Comparison?.Actual,
+                item.Verdict.Comparison?.Expected
+            ))
+            .ToArray();
+        var questions = verdicts
+            .Where(item => item.Verdict.RequiredFact is not null)
+            .Select(item => (Fact: item.Verdict.RequiredFact!.Value, item.ObjectId))
+            .GroupBy(item => item.Fact)
+            .Select(group => new InvoiceQuestion(
+                group.Key,
+                group.Select(item => item.ObjectId).Distinct(StringComparer.Ordinal).ToArray(),
+                QuestionText(group.Key)
+            ))
+            .ToArray();
+        var (subtotal, tax) = context.Totals;
+
+        return new(
+            "1.0",
+            caseId,
+            step,
+            CaseMetadata.PolicyVersion,
+            context.CompanyData.ContextVersion,
+            inputs.Number,
+            documentId,
+            ImportDisposition.New,
+            null,
+            null,
+            context.Order?.OrderId,
+            context.Order is null ? null : MatchSource.Deterministic,
+            context.Lines.Select(LineResult).ToArray(),
+            new InvoiceTotals(subtotal, tax, subtotal + tax),
+            checks,
+            InvoiceDecision.From(checks),
+            questions
+        );
+    }
+
+    private static CheckContext BuildContext(
+        RevisionInputs inputs,
+        IReadOnlyList<EarlierInvoice> earlierImports
+    )
     {
         var facts = inputs.Facts!;
         var companyData = inputs.CompanyData;
-        var (order, orderMatchSource, orderCheck) = OrderMatchCheck.Evaluate(facts, companyData);
-        var supplier = SupplierIdentityCheck.Resolve(facts, companyData);
-        var buyer = BuyerIdentityCheck.Resolve(facts, companyData);
-        var supplierCheck = SupplierIdentityCheck.Evaluate(facts, supplier, order);
-        var buyerCheck = BuyerIdentityCheck.Evaluate(facts, buyer, order);
-        var key = InvoiceBusinessKey.From(facts, supplier!, buyer!);
-        var (importDisposition, conflictCheck) = DocumentConflictCheck.Evaluate(facts, companyData, key, earlierImports);
-        var currencyCheck = CurrencyMatchCheck.Evaluate(facts, order);
-        var matches = LineMatchCheck.Evaluate(facts, order);
-        var lines = matches.Select((match, index) => EvaluateLine(inputs, order, match.OrderLine, match.MatchSource, index, key)).ToArray();
-        var (totals, totalsCheck) = TotalsArithmeticCheck.Evaluate(facts, lines.Select(line => line.Amounts).ToArray());
-        var bankCheck = BankAccountCheck.Evaluate(facts, supplier!);
+        var order = InvoiceMatches.FindOrder(facts, companyData);
+        var supplier = InvoiceMatches.FindSupplier(facts, companyData);
+        var buyer = InvoiceMatches.FindBuyer(facts, companyData);
+        var key =
+            supplier is null || buyer is null
+                ? null
+                : InvoiceBusinessKey.From(facts, supplier, buyer);
 
-        CheckOutcome[] outcomes =
-        [
-            conflictCheck, supplierCheck, buyerCheck, orderCheck, currencyCheck,
-            .. matches.Select(match => match.Outcome),
-            .. lines.SelectMany(line => line.Outcomes),
-            totalsCheck, bankCheck
-        ];
-        var checks = outcomes.Select(outcome => outcome.Check).ToArray();
-        var questions = outcomes.Select(outcome => outcome.Question).OfType<InvoiceQuestion>().ToArray();
-        return new("1.0", caseId, step, CaseMetadata.PolicyVersion, companyData.ContextVersion, inputs.Number,
-            facts.DocumentId, importDisposition, null, null, order.OrderId, orderMatchSource,
-            lines.Select(line => line.Result).ToArray(), totals, checks, InvoiceDecision.From(checks), questions);
+        var lines = facts
+            .Lines.Zip(InvoiceMatches.FindLines(facts, order), (invoice, match) =>
+            {
+                var quantities =
+                    match is null || order is null || key is null
+                        ? null
+                        : LineQuantities.Calculate(order, match.OrderLine, companyData, key);
+                return new MatchedLine(
+                    invoice,
+                    match?.OrderLine,
+                    match?.Reason,
+                    LineAmounts.Calculate(invoice),
+                    quantities
+                );
+            })
+            .ToArray();
+        var totals = new LineAmounts(
+            lines.Sum(line => line.Amounts.Net),
+            lines.Sum(line => line.Amounts.Tax)
+        );
+
+        return new(
+            facts,
+            companyData,
+            supplier,
+            buyer,
+            order,
+            lines,
+            key,
+            companyData.InvoiceHistory.Documents,
+            earlierImports,
+            totals
+        );
     }
 
-    private static (InvoiceLineResult Result, LineAmounts Amounts, CheckOutcome[] Outcomes) EvaluateLine(
-        RevisionInputs inputs, PurchaseOrder order, PurchaseOrderLine orderLine, string matchSource, int index, InvoiceBusinessKey key)
-    {
-        var facts = inputs.Facts!;
-        var line = facts.Lines[index];
-        var quantities = LineQuantities.Calculate(order, orderLine, inputs.CompanyData, key);
-        var receiptCheck = QuantityReceivedCheck.Evaluate(facts, line, index, quantities);
-        var remainingCheck = QuantityOrderRemainingCheck.Evaluate(facts, line, index, quantities);
-        var priceCheck = UnitPriceCheck.Evaluate(facts, line, index, orderLine);
-        var (amounts, arithmeticCheck) = LineArithmeticCheck.Evaluate(facts, line, index);
-        var result = new InvoiceLineResult(line.LineId, orderLine.LineId, matchSource,
-            InvoiceDecimal.Money(amounts.Net), InvoiceDecimal.Money(amounts.Tax),
-            InvoiceDecimal.Quantity(quantities.Ordered), FormatQuantity(quantities.Received),
-            InvoiceDecimal.Quantity(quantities.PreviouslyInvoiced), FormatQuantity(quantities.AvailableToInvoice),
-            InvoiceDecimal.Quantity(quantities.RemainingOnOrder));
+    private static InvoiceLineResult LineResult(MatchedLine line) =>
+        new(
+            line.Invoice.LineId,
+            line.OrderLine?.LineId,
+            line.OrderLine is null ? null : MatchSource.Deterministic,
+            line.Amounts.Net,
+            line.Amounts.Tax,
+            line.Quantities?.Ordered,
+            line.Quantities?.Received,
+            line.Quantities?.PreviouslyInvoiced,
+            line.Quantities?.AvailableToInvoice,
+            line.Quantities?.RemainingOnOrder
+        );
 
-        return (result, amounts, [receiptCheck, remainingCheck, priceCheck, arithmeticCheck]);
-    }
-
-    private static string? FormatQuantity(decimal? quantity) =>
-        quantity is decimal value ? InvoiceDecimal.Quantity(value) : null;
+    private static string QuestionText(RequiredFact fact) =>
+        fact switch
+        {
+            RequiredFact.SupplierRegistrationId => "What is the supplier's registration ID?",
+            RequiredFact.BuyerRegistrationId => "What is the buyer's registration ID?",
+            RequiredFact.DocumentCurrency => "What currency does the invoice use?",
+            RequiredFact.OrderReference => "Which purchase order does this invoice refer to?",
+            RequiredFact.LineMatch => "Which order lines match the listed invoice lines?",
+            RequiredFact.GoodsReceipts => "Which goods or services were received for these lines?",
+            RequiredFact.BankAccount => "What bank account is printed on the invoice?",
+            _ => throw new ArgumentOutOfRangeException(nameof(fact)),
+        };
 }

@@ -1,28 +1,40 @@
-using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Rules.Quantities;
 
-internal static class QuantityOrderRemainingCheck
+internal sealed class QuantityOrderRemainingCheck : ILineCheck
 {
-    private const string Code = "QTY_ORDER_REMAINING";
+    public CheckCode Code => CheckCode.QuantityOrderRemaining;
 
-    public static CheckOutcome Evaluate(InvoiceFacts facts, InvoiceLine line, int index, LineQuantities quantities)
+    public Verdict Evaluate(CheckContext context, MatchedLine line)
     {
-        CheckOutcome.Require(InvoiceDecimal.Parse(line.Quantity) <= quantities.RemainingOnOrder,
-            $"{Code} above the outstanding order quantity for {line.LineId}");
+        var invoice = line.Invoice;
+        var quantities = line.Quantities;
+        UnsupportedInvoiceCaseException.Require(
+            quantities is not null,
+            Code,
+            $"without order quantities for {invoice.LineId}"
+        );
+        UnsupportedInvoiceCaseException.Require(
+            invoice.Quantity <= quantities.RemainingOnOrder,
+            Code,
+            $"above the outstanding order quantity for {invoice.LineId}"
+        );
 
-        return CheckOutcome.Pass(Code, line.LineId, facts,
-            new Dictionary<string, CheckOperand>
-            {
-                ["quantity"] = CheckOperand.Invoice(line.Quantity),
-                ["unit"] = CheckOperand.Invoice(line.Unit)
-            },
-            new Dictionary<string, CheckOperand>
-            {
-                ["ordered"] = CheckOperand.Order(InvoiceDecimal.Quantity(quantities.Ordered)),
-                ["previously_invoiced"] = CheckOperand.History(InvoiceDecimal.Quantity(quantities.PreviouslyInvoiced)),
-                ["remaining_on_order"] = CheckOperand.Calculated(InvoiceDecimal.Quantity(quantities.RemainingOnOrder))
-            }, $"/lines/{index}/quantity", $"/lines/{index}/unit");
+        return Verdict.Pass(
+            new Comparison(
+                Actual:
+                [
+                    Operand.Invoice("quantity", invoice.Quantity),
+                    Operand.Invoice("unit", invoice.Unit),
+                ],
+                Expected:
+                [
+                    Operand.Order("ordered", quantities.Ordered),
+                    Operand.History("previously_invoiced", quantities.PreviouslyInvoiced),
+                    Operand.Calculated("remaining_on_order", quantities.RemainingOnOrder),
+                ]
+            )
+        );
     }
 }

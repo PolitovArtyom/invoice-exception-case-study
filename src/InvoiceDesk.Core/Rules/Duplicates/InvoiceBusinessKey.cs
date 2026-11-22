@@ -9,6 +9,8 @@ internal sealed record InvoiceBusinessKey(string SupplierId, string BuyerId, str
     public static InvoiceBusinessKey From(InvoiceFacts facts, Supplier supplier, Buyer buyer) =>
         new(supplier.SupplierId, buyer.BuyerId, InvoiceText.Identifier(facts.Number)!);
 
-    public bool Matches(CountedInvoice invoice) =>
-        SupplierId == invoice.SupplierId && BuyerId == invoice.BuyerId && Number == InvoiceText.Identifier(invoice.DocumentNumber);
+    public bool Matches(PreviousInvoice invoice) =>
+        SupplierId == invoice.SupplierId
+        && BuyerId == invoice.BuyerId
+        && Number == InvoiceText.Identifier(invoice.DocumentNumber);
 }
