@@ -9,13 +9,14 @@ namespace InvoiceDesk.Tests.Api;
 public sealed class PublicProposalLifecycleTests
 {
     [Fact]
-    public async Task Should_keep_three_assessments_when_010_is_completed_through_mcp_and_page()
+    public async Task Should_preserve_existing_work_when_fixture_loading_restarts()
     {
         const string caseId = "case-010";
         const string caseUrl = "/api/cases/" + caseId;
         const string proposalId = "PROP-010-01";
         using var environment = new CaseTestEnvironment();
         environment.CopyCase(caseId);
+        environment.CopyLateReceiptCase();
         var steps = PublicCases
             .Steps(caseId)
             .Select(path => JsonNode.Parse(File.ReadAllText(path))!)
@@ -25,6 +26,9 @@ public sealed class PublicProposalLifecycleTests
         {
             using var page = app.CreateClient();
             await using var mcp = await ConnectMcp(app);
+            using var recheck101 = await Recheck(page, "case-101");
+            recheck101.EnsureSuccessStatusCode();
+            Assert.Equal("clear", Text((await Body(recheck101))["result"]!, "decision"));
             var opened = Payload(await Call(mcp, "open_case", caseId));
             Assert.Null(opened["current_document_id"]);
             string source = Text(opened["sources"]![0]!, "relative_path")!;
@@ -104,6 +108,28 @@ public sealed class PublicProposalLifecycleTests
 
         await using var restarted = environment.Start();
         using var browser = restarted.CreateClient();
+        var ownCase = await Read(browser, "/api/cases/case-101");
+        Assert.Equal(2, ownCase["current_revision"]!.GetValue<int>());
+        Assert.Equal("ready_for_accounting", Text(ownCase, "stage"));
+        Assert.Collection(
+            (await Read(browser, "/api/cases/case-101/history")).AsArray(),
+            revision =>
+            {
+                Assert.Equal("CTX-101-v2", Text(revision!, "context_version"));
+                Assert.Equal("clear", Text(revision!["result"]!, "decision"));
+            },
+            revision =>
+            {
+                Assert.Equal("CTX-101-v1", Text(revision!, "context_version"));
+                Assert.Equal("blocked", Text(revision!["result"]!, "decision"));
+            }
+        );
+        var savedProposal = Assert.Single((await Read(browser, caseUrl))["proposals"]!.AsArray())!;
+        Assert.Equal(proposalId, Text(savedProposal["registration"]!["proposal"]!, "proposal_id"));
+        Assert.Equal(
+            "Delivery reviewer",
+            Text(savedProposal["registration"]!["confirmation"]!, "confirmed_by")
+        );
         var history = (await Read(browser, caseUrl + "/history")).AsArray();
         Assert.Equal(new[] { 4, 3, 2, 1 }, history.Select(row => row!["number"]!.GetValue<int>()));
         Assert.Null(history[3]!["result"]);

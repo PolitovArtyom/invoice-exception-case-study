@@ -333,7 +333,7 @@ public sealed class InvoiceDuplicateTests
             3
         );
 
-        var summary = Assert.Single((await Read(page, "/api/cases")).AsArray())!;
+        var summary = Assert.Single((await Read(page, "/api/cases"))["cases"]!.AsArray())!;
         Assert.Equal("needs_attention", Text(summary, "stage"));
         Assert.Equal("needs_review", Text(summary, "decision"));
         var current = await Read(page, CasePath);
@@ -364,7 +364,7 @@ public sealed class InvoiceDuplicateTests
         Assert.Equal("closed", Text(closed, "stage"));
         Assert.True(closed["original_pdf_available"]!.GetValue<bool>());
         Assert.True(closed["invoice_pdf_available"]!.GetValue<bool>());
-        var listed = Assert.Single((await Read(browser, "/api/cases")).AsArray())!;
+        var listed = Assert.Single((await Read(browser, "/api/cases"))["cases"]!.AsArray())!;
         Assert.Equal("case-008", Text(listed, "case_id"));
         Assert.Equal("closed", Text(listed, "stage"));
         Assert.Equal("ORIGINAL-008", Text(listed, "original_document_id"));

@@ -1,26 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { listCases, type CaseSummary } from '../api'
+import { listCases } from '../api'
 import DecisionTag from '../components/DecisionTag.vue'
 import SourceTag from '../components/SourceTag.vue'
-import { caseStageLabel } from '../caseStage'
+import { caseStageLabel, simulatedHandover, type CaseTab } from '../caseStage'
+import { checkTitle, issueOwnerLabel } from '../checkPresentation'
 import { formatDecimal } from '../formatDecimal'
 
 const router = useRouter()
-const cases = ref<CaseSummary[] | null>(null)
+const list = ref<Awaited<ReturnType<typeof listCases>> | null>(null)
 const error = ref('')
-const filter = ref<'active' | 'closed'>('active')
+const tabs: CaseTab[] = ['needs_attention', 'ready_for_accounting', 'closed']
+const filter = ref<CaseTab>('needs_attention')
 const visibleCases = computed(
-  () =>
-    cases.value?.filter(
-      (item) => (item.stage === 'closed') === (filter.value === 'closed'),
-    ) ?? [],
+  () => list.value?.cases.filter((item) => item.tab === filter.value) ?? [],
 )
 
 onMounted(async () => {
   try {
-    cases.value = await listCases()
+    list.value = await listCases()
   } catch (failure) {
     error.value = (failure as Error).message
   }
@@ -30,22 +29,17 @@ onMounted(async () => {
 <template>
   <h1>Cases</h1>
   <p v-if="error" role="alert">{{ error }}</p>
-  <p v-else-if="cases === null" role="status">Loading cases…</p>
+  <p v-else-if="list === null" role="status">Loading cases…</p>
   <template v-else>
     <div class="case-filters" role="group" aria-label="Filter cases">
       <button
+        v-for="tab in tabs"
+        :key="tab"
         type="button"
-        :aria-pressed="filter === 'active'"
-        @click="filter = 'active'"
+        :aria-pressed="filter === tab"
+        @click="filter = tab"
       >
-        Active
-      </button>
-      <button
-        type="button"
-        :aria-pressed="filter === 'closed'"
-        @click="filter = 'closed'"
-      >
-        Closed
+        {{ caseStageLabel(tab) }} ({{ list.counts[tab] }})
       </button>
     </div>
     <section class="card table-card" aria-label="Invoice cases">
@@ -55,9 +49,10 @@ onMounted(async () => {
             <tr>
               <th scope="col">Invoice</th>
               <th scope="col">Supplier</th>
+              <th scope="col">Issue date</th>
               <th scope="col" class="align-right">Declared total</th>
               <th scope="col">Result</th>
-              <th scope="col">Stage</th>
+              <th scope="col">Summary</th>
             </tr>
           </thead>
           <tbody>
@@ -75,12 +70,18 @@ onMounted(async () => {
                 >
                   {{ item.number ?? item.case_id }}
                 </RouterLink>
-                <small v-if="item.number || item.origin === 'own'" class="mono">
-                  {{ item.number ? item.case_id : ''
-                  }}{{ item.origin === 'own' ? ' · Own scenario' : '' }}
-                </small>
+                <small v-if="item.number" class="mono">{{
+                  item.case_id
+                }}</small>
+                <small v-if="item.origin === 'own'">Own scenario</small>
               </td>
               <td>{{ item.supplier ?? '—' }}</td>
+              <td>
+                <time v-if="item.issue_date" :datetime="item.issue_date">
+                  {{ item.issue_date }}
+                </time>
+                <template v-else>—</template>
+              </td>
               <td class="align-right amount-cell">
                 <template v-if="item.declared_total !== null">
                   <span class="number"
@@ -93,20 +94,35 @@ onMounted(async () => {
               </td>
               <td>
                 <DecisionTag :decision="item.decision" :stage="item.stage" />
-                <small v-if="item.original_document_id">
-                  Original {{ item.original_document_id }}
-                </small>
               </td>
               <td>
-                {{ caseStageLabel(item.stage) }}
+                <template v-if="item.stage === 'ready_for_accounting'">
+                  {{ simulatedHandover }}
+                  <small>
+                    Revision {{ item.assessed_revision }} ·
+                    {{ item.context_version }}
+                  </small>
+                </template>
+                <template v-else-if="item.stage === 'closed'">
+                  Already registered as {{ item.original_document_id }}.
+                  <small>No further processing.</small>
+                </template>
+                <template v-else-if="item.main_issue">
+                  {{ checkTitle(item.main_issue) }}
+                  <small v-if="item.main_issue_owner">
+                    Ask {{ issueOwnerLabel(item.main_issue_owner) }}.
+                  </small>
+                </template>
+                <template v-else-if="item.stage === 'needs_attention'">
+                  Re-check with the latest company data.
+                </template>
+                <template v-else>{{ caseStageLabel(item.stage) }}</template>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p v-else class="empty-list">
-        {{ filter === 'closed' ? 'No closed cases.' : 'No active cases.' }}
-      </p>
+      <p v-else class="empty-list">No cases in {{ caseStageLabel(filter) }}.</p>
     </section>
   </template>
 </template>

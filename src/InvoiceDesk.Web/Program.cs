@@ -26,6 +26,7 @@ builder.Services.AddScoped<CaseService>();
 builder.Services.AddScoped<CaseReader>();
 builder.Services.AddScoped<CasePdfs>();
 builder.Services.AddScoped<CaseLoader>();
+builder.Services.AddScoped<InvoiceRecheck>();
 builder
     .Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)

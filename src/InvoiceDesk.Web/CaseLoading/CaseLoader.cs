@@ -22,6 +22,7 @@ public sealed class CaseLoader(
         "case-007",
         "case-008",
         "case-009",
+        "case-101",
     ];
 
     public void Load()

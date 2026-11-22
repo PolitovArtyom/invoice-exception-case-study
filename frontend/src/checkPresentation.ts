@@ -3,6 +3,7 @@ import type {
   InvoiceCheck,
   InvoiceFacts,
   InvoiceMissingField,
+  IssueOwner,
 } from './api'
 
 const titles: Record<string, string> = {
@@ -22,6 +23,16 @@ const titles: Record<string, string> = {
 
 export function checkTitle(code: string) {
   return titles[code] ?? code
+}
+
+const issueOwnerLabels: Record<IssueOwner, string> = {
+  accounts_payable: 'Accounts payable',
+  procurement: 'Procurement',
+  receiving: 'Receiving',
+}
+
+export function issueOwnerLabel(owner: IssueOwner) {
+  return issueOwnerLabels[owner]
 }
 
 export function verdictLabel(check: InvoiceCheck) {

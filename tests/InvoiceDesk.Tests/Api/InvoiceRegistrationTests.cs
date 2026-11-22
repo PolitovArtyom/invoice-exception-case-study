@@ -118,7 +118,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
         AssertSameJson(registered["result"], revision["result"]);
 
         var list = await Read(page, "/api/cases");
-        var row = Assert.Single(list.AsArray())!;
+        var row = Assert.Single(list["cases"]!.AsArray())!;
         Assert.Equal("2214.24", row["declared_total"]!.GetValue<string>());
         Assert.Equal("EUR", row["currency"]!.GetValue<string>());
         Assert.Equal("ready_for_accounting", row["stage"]!.GetValue<string>());

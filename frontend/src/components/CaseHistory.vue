@@ -11,12 +11,19 @@ const actions: Record<RevisionView['action']['kind'], string> = {
   propose_match: 'Proposed a match',
   confirm_proposal: 'Confirmed a proposal',
   replace_company_data: 'Loaded company data',
+  recheck_invoice: 'Re-checked invoice',
 }
 const actors: Record<RevisionView['action']['actor'], string> = {
   trusted_loader: 'Trusted loader',
   agent: 'Agent',
   human: 'Person',
   runner: 'Runner',
+}
+
+function actionLabel(action: RevisionView['action']) {
+  return action.kind === 'recheck_invoice' && action.company_data_submitted
+    ? 'Re-checked invoice with updated company data'
+    : actions[action.kind]
 }
 </script>
 
@@ -41,7 +48,7 @@ const actors: Record<RevisionView['action']['actor'], string> = {
         </RouterLink>
         <div>
           <p>
-            <strong>{{ actions[revision.action.kind] }}</strong> ·
+            <strong>{{ actionLabel(revision.action) }}</strong> ·
             {{ actors[revision.action.actor] }}
           </p>
           <p v-if="revision.action.proposal_ids?.length" class="muted">

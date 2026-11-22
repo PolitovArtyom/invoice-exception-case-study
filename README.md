@@ -2,9 +2,9 @@
 
 Invoice Desk checks an invoice against a saved company-data snapshot and shows the decision and its supporting calculations. An agent reads the PDF and submits printed facts with evidence. The application evaluates those facts using the assignment's `core-v1` rules.
 
-| Scope | Stage 03 |
+| Scope | Stage 04 |
 | --- | --- |
-| Built | PDF source references, MCP fact registration, SQLite assessment history, and a workspace for matched invoices. Party, currency, quantity, price, arithmetic and bank checks produce saved assessments. The workspace shows conflicts, closes duplicate-only cases and pairs parsed facts with PDF evidence. R2 matches orders and lines, tracks agent proposals and records human confirmation. The native adapter passes all ten public cases and twelve steps. |
+| Built | PDF source references, MCP fact registration, SQLite assessment history, and a workspace for matched invoices. Party, currency, quantity, price, arithmetic and bank checks produce saved assessments. The workspace shows conflicts, closes duplicate-only cases and pairs parsed facts with PDF evidence. R2 matches orders and lines, tracks agent proposals and records human confirmation. Re-check picks up changed company data from an operator file and keeps earlier assessments. The workspace groups cases into Needs attention, Ready for accounting and Closed. The native adapter passes all ten public cases and twelve steps. |
 | Described | [Remaining stages](docs/plan.md), [architecture](docs/architecture.md), and the [assignment](#invoice-exception-agent). |
 | Prototype | [Simulated product vision](submission/prototype/), including the unbuilt case 103. |
 
@@ -18,9 +18,9 @@ docker compose up --build --wait
 
 Open the case list at `http://127.0.0.1:8080/` and the clean invoice at `http://127.0.0.1:8080/cases/case-001`. Compose waits for `/health`, which becomes available after migrations and case loading. Set `INVOICE_PORT` to change the loopback port.
 
-With a fresh database, cases 001–003 and 005–009 start with their first-step facts and carry the label “loaded from test data, not read by the agent”. [Case 006](http://127.0.0.1:8080/cases/case-006) shows a supplier mismatch alongside a passing bank check. Case 008 is in Closed with a link to the original PDF. [Case 009](http://127.0.0.1:8080/cases/case-009) shows the differences from the counted original. Cases 004 and 010 start with company data and PDF references for the agent to read. To exercise a fresh registration, add a clean invoice under a new case ID in `scenarios/cases`, restart Web and register the facts. Re-importing the same facts records a duplicate attempt and leaves the existing assessment visible.
+With a fresh database, cases 001–003, 005–009 and 101 start with their first-step facts and carry the label “loaded from test data, not read by the agent”. [Case 006](http://127.0.0.1:8080/cases/case-006) shows a supplier mismatch alongside a passing bank check. Case 008 is in Closed with a link to the original PDF. [Case 009](http://127.0.0.1:8080/cases/case-009) shows the differences from the counted original. Cases 004 and 010 start with company data and PDF references for the agent to read. To exercise a fresh registration, add a clean invoice under a new case ID in `scenarios/cases`, restart Web and register the facts. Re-importing the same facts records a duplicate attempt and leaves the existing assessment visible.
 
-The database is in the Compose `invoice-data` volume. `docker compose down` stops the app and preserves history. Use `docker compose down --volumes` to reset this project's volume. Case folders under `dataset/cases` and `scenarios/cases` are mounted read-only. The startup loader discovers new cases on restart and preserves existing revisions. The allow-list seeds facts only when a case is first loaded. A fresh demo volume loads the newly enabled cases automatically. Use the same case ID for the folder name, case manifest and first step. Startup reports malformed case data with the folder path. Own case folders use the assignment's case metadata and first-step layout.
+The database is in the Compose `invoice-data` volume. `docker compose down` stops the app and preserves history. Use `docker compose down --volumes` to reset this project's volume. Case folders under `dataset/cases` and `scenarios/cases` are mounted read-only. The startup loader discovers new cases on restart and preserves existing revisions. The allow-list seeds facts only when a case is first loaded. A fresh demo volume loads the newly enabled cases automatically. Use the same case ID for the folder name, case manifest and first step. Startup reports malformed case data with the folder path. Own case folders use the assignment's case metadata and first-step layout. The loader reads the first step and ignores runner expectation paths.
 
 ### Connect an agent
 
@@ -43,6 +43,14 @@ MCP registration requires a reason for each null fact and quotes for printed val
 With case 010 open, the agent reads and registers the invoice facts, then uses `get_company_data` to inspect orders and `propose_match` to submit an agent proposal. The proposal contains `proposal_id`, `actor: "agent"`, `document_id`, `order_id` and `line_matches` (each with `document_line_id` and `order_line_id`).
 
 Open the case page and select the proposal to review its line mapping and the assessment preview. Enter your name, acknowledge the supporting delivery documents and confirm. Confirmation saves the selected proposal and recalculates all rules. History shows who acted, the input revisions and versions, and the saved assessment for each result. Use Open the latest to return to the current case.
+
+### Re-check when company data changes
+
+Open [case 101](http://127.0.0.1:8080/cases/case-101) on a fresh volume. The invoice starts blocked because the receipt directory is available and empty. Press **Re-check with the latest company data**. The update supplied with the case records receipt of 60 units. Revision 2 becomes clear and the case moves to Ready for accounting. In History, open Revision 1 to read the blocked assessment and its snapshot. The same invoice facts and PDF are used in both revisions.
+
+For any case with saved invoice facts, place a complete replacement snapshot at `scenarios/updates/<case_id>/context.json` on the host. The page action and MCP `assess_invoice` pick it up while the app is running. Re-check compares typed snapshot values. Whitespace, property order and equivalent decimal spellings are treated alike. Array order and the version label are significant. A missing or equal file returns the saved assessment with `inputs_unchanged: true` when it still covers the current inputs. If a combined duplicate submission retained changed inputs, re-check assesses them using the existing snapshot. An invalid file identifies the failing field and leaves history intact.
+
+A clear result is handed to accounting (simulated) without a confirmation step. The app shows the assessed revision and company-data version. Only counted invoices supplied in company data reduce capacity. The demo performs no accounting posting or payment.
 
 ## Build and run the native adapter
 

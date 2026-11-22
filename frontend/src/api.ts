@@ -1,6 +1,7 @@
-import type { CaseStage } from './caseStage'
+import type { CaseStage, CaseTab } from './caseStage'
 
 type CaseOrigin = 'assignment' | 'own'
+export type IssueOwner = 'accounts_payable' | 'procurement' | 'receiving'
 export type ReadingOrigin = 'fixture' | 'agent' | 'runner'
 export type MatchSource =
   'deterministic' | 'agent_proposal' | 'human_confirmation'
@@ -10,11 +11,22 @@ export interface CaseSummary {
   origin: CaseOrigin
   number: string | null
   supplier: string | null
+  issue_date: string | null
   declared_total: string | null
   currency: string | null
   decision: string | null
   stage: CaseStage
+  tab: CaseTab
   original_document_id: string | null
+  main_issue: string | null
+  main_issue_owner: IssueOwner | null
+  assessed_revision: number | null
+  context_version: string | null
+}
+
+interface CaseList {
+  counts: Record<CaseTab, number>
+  cases: CaseSummary[]
 }
 
 interface InvoiceParty {
@@ -81,6 +93,8 @@ export interface InvoiceMissingField {
 }
 
 export interface InvoiceResult {
+  input_revision: number
+  context_version: string
   decision: string
   matched_order_id: string | null
   order_match_source: MatchSource | null
@@ -101,6 +115,11 @@ export interface InvoiceCheck {
   depends_on: string | null
   actual: Record<string, CheckOperand> | null
   expected: Record<string, CheckOperand> | null
+}
+
+export interface CaseIssue {
+  check: InvoiceCheck
+  owner: IssueOwner
 }
 
 export interface CheckOperand {
@@ -138,6 +157,8 @@ export interface CaseView {
   effective_proposal_id: string | null
   proposals: ProposalView[]
   open_supplier_orders: PurchaseOrder[]
+  company_data: Record<string, unknown>
+  issues: CaseIssue[]
   stage: CaseStage
   revision: RevisionView
 }
@@ -155,6 +176,7 @@ export interface RevisionView {
       | 'propose_match'
       | 'confirm_proposal'
       | 'replace_company_data'
+      | 'recheck_invoice'
     actor: 'trusted_loader' | 'agent' | 'human' | 'runner'
     recorded_at: string
     proposal_ids: string[] | null
@@ -228,7 +250,7 @@ export class ActionError extends Error {
 }
 
 export function listCases() {
-  return request<CaseSummary[]>('/api/cases')
+  return request<CaseList>('/api/cases')
 }
 
 function casePath(caseId: string) {
@@ -239,6 +261,13 @@ export function getCase(caseId: string, revision?: string) {
   const path = casePath(caseId)
   return request<CaseView>(
     revision ? `${path}/revisions/${encodeURIComponent(revision)}` : path,
+  )
+}
+
+export function recheckInvoice(caseId: string) {
+  return request<{ inputs_unchanged: boolean; result: InvoiceResult }>(
+    `${casePath(caseId)}/rechecks`,
+    { method: 'POST' },
   )
 }
 

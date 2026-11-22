@@ -20,12 +20,36 @@ internal sealed class CaseTestEnvironment : IDisposable
     public string DatabasePath => Path.Combine(_directory.Path, "invoice.sqlite");
 
     public string CopyCase(string caseId, bool own = false) =>
-        CopyCaseFolder(caseId, Path.Combine(own ? ScenarioPath : DatasetPath, "cases", caseId));
+        CopyCaseFolder(
+            PublicCases.Folder(caseId),
+            Path.Combine(own ? ScenarioPath : DatasetPath, "cases", caseId)
+        );
+
+    public void CopyLateReceiptCase()
+    {
+        const string caseId = "case-101";
+        string scenarios = Path.Combine(Path.GetDirectoryName(PublicCases.Root)!, "scenarios");
+        CopyCaseFolder(
+            Path.Combine(scenarios, "cases", caseId),
+            Path.Combine(ScenarioPath, "cases", caseId)
+        );
+        WriteCompanyDataUpdate(
+            caseId,
+            File.ReadAllText(Path.Combine(scenarios, "updates", caseId, "context.json"))
+        );
+    }
+
+    public void WriteCompanyDataUpdate(string caseId, string json)
+    {
+        string folder = Path.Combine(ScenarioPath, "updates", caseId);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "context.json"), json);
+    }
 
     public string AddReviewerCase()
     {
         string folder = CopyCaseFolder(
-            PublicCases.CleanCase,
+            PublicCases.Folder(PublicCases.CleanCase),
             Path.Combine(ScenarioPath, "cases", ReviewerCaseId)
         );
         string manifestPath = Path.Combine(folder, "case.json");
@@ -61,9 +85,8 @@ internal sealed class CaseTestEnvironment : IDisposable
             )
         );
 
-    private static string CopyCaseFolder(string caseId, string destination)
+    private static string CopyCaseFolder(string original, string destination)
     {
-        string original = PublicCases.Folder(caseId);
         foreach (string subdirectory in new[] { "steps", "documents" })
         {
             Directory.CreateDirectory(Path.Combine(destination, subdirectory));

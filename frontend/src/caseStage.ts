@@ -6,6 +6,9 @@ const caseStageLabels = {
 }
 
 export type CaseStage = keyof typeof caseStageLabels
+export type CaseTab = Exclude<CaseStage, 'not_read'>
+
+export const simulatedHandover = 'Handed to accounting (simulated)'
 
 export function caseStageLabel(stage: CaseStage): string {
   return caseStageLabels[stage]

@@ -24,6 +24,22 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
         return Directory.EnumerateDirectories(parent).Order(StringComparer.Ordinal);
     }
 
+    internal string? ReadCompanyDataUpdate(string caseId)
+    {
+        try
+        {
+            return File.ReadAllText(Path.Combine(_ownRoot, "updates", caseId, "context.json"));
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
+    }
+
     public string? FindPdf(InvoiceSource source) =>
         FindFile(GetRoot(source.Root), source.RelativePath);
 

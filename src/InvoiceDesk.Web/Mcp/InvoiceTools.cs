@@ -17,6 +17,7 @@ public sealed class InvoiceTools(
     CaseService cases,
     CaseReader reader,
     CaseFolders folders,
+    InvoiceRecheck recheck,
     ILogger<InvoiceTools> logger
 )
 {
@@ -143,10 +144,15 @@ public sealed class InvoiceTools(
 
     [
         McpServerTool(Name = "assess_invoice"),
-        Description("Return the saved assessment for the case's unchanged inputs.")
+        Description(
+            "Re-check with updated company data supplied by the operator, or return the saved assessment if unchanged."
+        )
     ]
     public CallToolResult AssessInvoice(string case_id) =>
-        ToolResponse.Run(() => reader.AssessInvoice(case_id), logger);
+        ToolResponse.Run(
+            () => recheck.Recheck(case_id, RevisionActor.Agent) ?? throw UnknownCase(),
+            logger
+        );
 
     [
         McpServerTool(Name = "get_assessment"),

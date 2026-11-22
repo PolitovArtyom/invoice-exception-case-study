@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
@@ -53,6 +55,61 @@ public sealed class CaseService(
             RevisionKind.ReplaceCompanyData,
             RevisionActor.TrustedLoader
         );
+    }
+
+    public AssessmentResponse RecheckInvoice(string caseId, string? updateJson, RevisionActor actor)
+    {
+        using var transaction = repository.BeginUpdate();
+        var invoiceCase = RequireCase(caseId);
+        var current = repository.FindCurrentRevisionForUpdate(invoiceCase)!;
+        if (current.Document is null)
+            throw new InvoiceValidationException(
+                "/case_id",
+                current.DuplicateAttempt is null
+                    ? "Register invoice facts before requesting an assessment."
+                    : "Closed as a duplicate. There is no assessment to re-check."
+            );
+
+        var data = updateJson is null ? null : ReadCompanyDataUpdate(updateJson);
+        if (data is null || InvoiceJson.SameCompanyData(data, current.Snapshot.Data))
+        {
+            var saved = repository.ReadAssessmentOrLatestRevision(invoiceCase);
+            if (!repository.InputsChanged(invoiceCase, saved))
+                return new(CaseReader.AssessmentId(saved.Number), saved.Result!, true);
+
+            data = null;
+        }
+
+        var result = Apply(
+            invoiceCase,
+            current,
+            new(CompanyData: data),
+            RevisionKind.RecheckInvoice,
+            actor
+        )!;
+        transaction.Commit();
+        return Response(result);
+    }
+
+    private static CompanyData ReadCompanyDataUpdate(string json)
+    {
+        JsonNode? data;
+        try
+        {
+            data = JsonNode.Parse(
+                json,
+                documentOptions: new() { AllowDuplicateProperties = false }
+            );
+        }
+        catch (JsonException)
+        {
+            throw new InvoiceValidationException(
+                "/context",
+                "Expected one JSON company data object."
+            );
+        }
+
+        return IntakeValidation.ReadCompanyData(data, "/context");
     }
 
     public AssessmentResponse ConfirmProposal(string caseId, ConfirmationForm form)
@@ -133,8 +190,7 @@ public sealed class CaseService(
     )
     {
         using var transaction = repository.BeginUpdate();
-        var invoiceCase = repository.FindForUpdate(caseId)
-            ?? throw new InvoiceValidationException("/case_id", "Case does not exist.");
+        var invoiceCase = RequireCase(caseId);
         var current = repository.FindCurrentRevisionForUpdate(invoiceCase)!;
         if (submission.ExpectedRevision is { } expected && expected != current.Number)
             throw new InvoiceValidationException(
@@ -144,14 +200,19 @@ public sealed class CaseService(
 
         var result = Apply(invoiceCase, current, submission, kind, actor);
         transaction.Commit();
-        return result is null
-            ? null
-            : new(
-                result.Decision is null ? null : CaseReader.AssessmentId(result.InputRevision),
-                result,
-                false
-            );
+        return result is null ? null : Response(result);
     }
+
+    private InvoiceCase RequireCase(string caseId) =>
+        repository.FindForUpdate(caseId)
+        ?? throw new InvoiceValidationException("/case_id", "Case does not exist.");
+
+    private static AssessmentResponse Response(InvoiceResult result) =>
+        new(
+            result.Decision is null ? null : CaseReader.AssessmentId(result.InputRevision),
+            result,
+            false
+        );
 
     private InvoiceResult? Apply(
         InvoiceCase invoiceCase,

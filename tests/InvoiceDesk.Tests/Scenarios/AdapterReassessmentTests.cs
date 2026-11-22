@@ -98,6 +98,98 @@ public sealed class AdapterReassessmentTests
         );
     }
 
+    [Fact]
+    public async Task Should_assess_retained_inputs_when_a_combined_duplicate_has_no_update_file()
+    {
+        const string caseId = "case-002";
+        const string caseUrl = "/api/cases/" + caseId;
+        using var state = new TemporaryDirectory();
+        var step = PublicCases.ReadFirstStep(caseId);
+        var initial = Submit(step, state.Path);
+        AssertOutcome(initial, "clear", "DOC-002", ["L01"], [], matchedOrderId: "ORD-002");
+        AssertLine(
+            initial,
+            "L01",
+            "OL-002-01",
+            "deterministic",
+            "750.00",
+            "150.00",
+            ordered: "100",
+            received: "60",
+            available: "60",
+            remaining: "100"
+        );
+        AssertTotals(initial, "750.00", "150.00", "900.00");
+
+        var context = step["context"]!;
+        step["step"] = 2;
+        context["context_version"] = "CTX-002-EMPTY";
+        context["goods_receipts"]!["receipts"] = new JsonArray();
+        AssertDuplicate(Submit(step, state.Path), "DOC-002", "DOC-002", "1", 2);
+
+        using var environment = new CaseTestEnvironment();
+        string databasePath = Path.Combine(state.Path, "state.sqlite");
+        await using var app = environment.Start(databasePath);
+        using var page = app.CreateClient();
+        var before = await Read(page, caseUrl);
+        Assert.True(before["inputs_changed"]!.GetValue<bool>());
+        AssertSameJson(initial, before["revision"]!["result"]);
+
+        using var response = await Recheck(page, caseId);
+        response.EnsureSuccessStatusCode();
+        var rechecked = await Body(response);
+        Assert.False(rechecked["inputs_unchanged"]!.GetValue<bool>());
+        Assert.Equal("3", Text(rechecked, "assessment_id"));
+        var result = rechecked["result"]!;
+        Assert.Equal("CTX-002-EMPTY", Text(result, "context_version"));
+        Assert.Equal(3, result["input_revision"]!.GetValue<int>());
+        AssertOutcome(
+            result,
+            "blocked",
+            "DOC-002",
+            ["L01"],
+            [new("QTY_RECEIVED", "L01", "fail", "blocked")],
+            matchedOrderId: "ORD-002"
+        );
+        AssertLine(
+            result,
+            "L01",
+            "OL-002-01",
+            "deterministic",
+            "750.00",
+            "150.00",
+            ordered: "100",
+            received: "0",
+            available: "0",
+            remaining: "100"
+        );
+        AssertTotals(result, "750.00", "150.00", "900.00");
+
+        var latest = await Read(page, caseUrl);
+        Assert.False(latest["inputs_changed"]!.GetValue<bool>());
+        AssertSameJson(context, latest["company_data"]);
+        AssertSameJson(before["revision"]!["document"], latest["revision"]!["document"]);
+        await using var mcp = await ConnectMcp(app);
+        var repeated = Payload(await Call(mcp, "assess_invoice", caseId));
+        Assert.True(repeated["inputs_unchanged"]!.GetValue<bool>());
+        AssertSameJson(result, repeated["result"]);
+        Assert.Collection(
+            (await Read(page, caseUrl + "/history")).AsArray(),
+            assessment =>
+            {
+                AssertSameJson(result, assessment!["result"]);
+                Assert.Equal("human", Text(assessment["action"]!, "actor"));
+                Assert.False(assessment["action"]!["company_data_submitted"]!.GetValue<bool>());
+            },
+            duplicate =>
+            {
+                Assert.Null(duplicate!["result"]);
+                Assert.NotNull(duplicate["duplicate_attempt"]);
+            },
+            assessment => AssertSameJson(initial, assessment!["result"])
+        );
+    }
+
     private static JsonNode ImportWithoutSupplier(JsonObject original, string statePath)
     {
         var blocked = original.DeepClone().AsObject();

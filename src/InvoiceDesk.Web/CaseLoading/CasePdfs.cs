@@ -19,6 +19,8 @@ internal sealed class CasePdfs(CaseReader reader, CaseFolders folders)
             view.Proposals,
             view.EffectiveProposalId,
             view.OpenSupplierOrders,
+            CompanyData = reader.ReadCompanyData(view.Case.CaseId, view.Revision.Number),
+            view.Issues,
             InvoicePdfAvailable = FindPdf(
                 view.ShowDuplicateReading
                     ? view.Revision.DuplicateAttempt?.Reading.Source

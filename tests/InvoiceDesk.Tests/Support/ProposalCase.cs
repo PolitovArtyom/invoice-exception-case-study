@@ -67,6 +67,9 @@ internal sealed class ProposalCase : IAsyncDisposable
         return (await Body(response))["result"]!;
     }
 
+    public void WriteCompanyDataUpdate(string json) =>
+        _environment.WriteCompanyDataUpdate(CaseId, json);
+
     public JsonNode ReplaceCompanyData(CompanyData data)
     {
         using var scope = _app.Services.CreateScope();

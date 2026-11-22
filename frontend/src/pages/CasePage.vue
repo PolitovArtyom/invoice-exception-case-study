@@ -11,6 +11,7 @@ import {
   type RevisionView,
 } from '../api'
 import CaseHistory from '../components/CaseHistory.vue'
+import InvoiceRecheck from '../components/InvoiceRecheck.vue'
 import ProposalReview from '../components/ProposalReview.vue'
 import ConflictDifferences from '../components/ConflictDifferences.vue'
 import InvoiceFactsPanel from '../components/InvoiceFactsPanel.vue'
@@ -21,7 +22,7 @@ import NeedsAttention from '../components/NeedsAttention.vue'
 import InvoiceTotals from '../components/InvoiceTotals.vue'
 import SourceTag from '../components/SourceTag.vue'
 import { isLineCheck } from '../checkPresentation'
-import { caseStageLabel } from '../caseStage'
+import { caseStageLabel, simulatedHandover } from '../caseStage'
 import { formatDecimal } from '../formatDecimal'
 
 const readingOriginLabels: Record<ReadingOrigin, string> = {
@@ -194,10 +195,9 @@ watch(
           :stage="view.stage"
         />
         <p
-          v-if="
-            view.stage === 'ready_for_accounting' || view.stage === 'closed'
-          "
+          v-if="view.stage !== 'not_read'"
           class="stage"
+          :class="{ 'stage-warning': view.stage === 'needs_attention' }"
         >
           {{ caseStageLabel(view.stage) }}
         </p>
@@ -216,6 +216,23 @@ watch(
         <span v-else-if="facts" class="muted">Invoice PDF unavailable</span>
       </div>
     </section>
+    <section
+      v-if="view.stage === 'ready_for_accounting' && !view.superseded"
+      class="card"
+      aria-label="Accounting handover"
+    >
+      <strong>{{ simulatedHandover }}</strong>
+      <p>
+        No matching action is needed. Accounting would return counted invoices
+        in a later company-data snapshot.
+      </p>
+    </section>
+    <InvoiceRecheck
+      v-if="!revision && document && !view.show_duplicate_reading"
+      :key="caseId"
+      :case-id="caseId"
+      @rechecked="load()"
+    />
     <section
       v-if="view.show_duplicate_reading && original"
       class="card"
@@ -236,7 +253,7 @@ watch(
           >{{ original.document_id }}</a
         >
         <span v-else class="mono">{{ original.document_id }}</span>. This resend
-        requires no further processing.
+        produced no new assessment and requires no further processing.
       </p>
     </section>
     <p v-if="view.latest_duplicate_revision !== null" class="card">
@@ -249,6 +266,7 @@ watch(
     <template v-if="result && facts">
       <NeedsAttention
         :checks="result.checks"
+        :issues="view.issues"
         :lines="facts.lines"
         :currency="facts.currency"
       />
@@ -296,6 +314,12 @@ watch(
     </template>
     <InvoiceFactsPanel v-if="facts" :facts="facts" :pdf="pdf" />
     <p v-else class="waiting-note">The agent has not read this invoice yet.</p>
+    <details class="card company-data">
+      <summary>
+        Company data snapshot · {{ view.revision.context_version }}
+      </summary>
+      <pre>{{ JSON.stringify(view.company_data, null, 2) }}</pre>
+    </details>
     <CaseHistory
       :case-id="caseId"
       :selected="view.revision.number"

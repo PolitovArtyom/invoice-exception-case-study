@@ -63,6 +63,13 @@ public sealed class CaseRepository(InvoiceDatabase database)
     internal CaseRevision? ReadRevision(string caseId, int number) =>
         RevisionQuery.SingleOrDefault(row => row.CaseId == caseId && row.Number == number);
 
+    internal CompanyData? ReadCompanyData(string caseId, int number) =>
+        database
+            .Revisions.AsNoTracking()
+            .Where(row => row.CaseId == caseId && row.Number == number)
+            .Select(row => row.Snapshot.Data)
+            .SingleOrDefault();
+
     internal int? ReadLatestDuplicateRevision(
         string caseId,
         long documentId,

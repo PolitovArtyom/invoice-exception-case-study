@@ -219,4 +219,42 @@ public sealed class ProposalAssessmentTests
         );
         AssertTotals(result, "10.00", "2.00", "12.00");
     }
+
+    [Theory]
+    [InlineData("pcs", "accounts_payable")]
+    [InlineData("box", "procurement")]
+    public async Task Should_show_the_same_owner_on_the_list_and_detail_when_a_line_needs_attention(
+        string unit,
+        string proposedOwner
+    )
+    {
+        var baseline = MatchedInvoiceScenario.Baseline();
+        await using var test = await Start(
+            baseline.WithFirstLine(
+                baseline.Facts.Lines[0] with
+                {
+                    Sku = null,
+                    Description = "Different product label",
+                    Unit = unit,
+                }
+            )
+        );
+        await AssertIssueOwner("procurement");
+
+        await test.Propose(Proposal("P", "O", [new("L", "OL")]));
+        await AssertIssueOwner(proposedOwner);
+
+        async Task AssertIssueOwner(string owner)
+        {
+            var list = await Read(test.Page, "/api/cases");
+            var summary = Assert.Single(list["cases"]!.AsArray())!;
+            Assert.Equal("LINE_MATCH", Text(summary, "main_issue"));
+            Assert.Equal(owner, Text(summary, "main_issue_owner"));
+            var detail = await Read(test.Page, CaseUrl);
+            var issue = Assert.Single(detail["issues"]!.AsArray())!;
+            Assert.Equal("LINE_MATCH", Text(issue["check"]!, "code"));
+            Assert.Equal("L", Text(issue["check"]!, "object_id"));
+            Assert.Equal(owner, Text(issue, "owner"));
+        }
+    }
 }

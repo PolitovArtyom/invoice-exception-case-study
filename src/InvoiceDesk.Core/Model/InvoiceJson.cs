@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -27,7 +28,12 @@ public static class InvoiceJson
             },
         };
 
-    private static readonly JsonSerializerOptions InputOptions = CreateInputOptions();
+    private static readonly JsonSerializerOptions InputOptions = WithDecimalConverter(
+        new InputDecimalStringConverter()
+    );
+
+    private static readonly JsonSerializerOptions CompanyDataComparisonOptions =
+        WithDecimalConverter(new ComparableDecimalStringConverter());
 
     internal static T ReadInput<T>(JsonNode json) =>
         json.Deserialize<T>(InputOptions) ?? throw new JsonException("A JSON value is required.");
@@ -38,10 +44,26 @@ public static class InvoiceJson
 
     public static string Write<T>(T value) => JsonSerializer.Serialize(value, Options);
 
-    private static JsonSerializerOptions CreateInputOptions()
+    internal static bool SameCompanyData(
+        CompanyData.CompanyData left,
+        CompanyData.CompanyData right
+    ) =>
+        JsonSerializer.Serialize(left, CompanyDataComparisonOptions)
+        == JsonSerializer.Serialize(right, CompanyDataComparisonOptions);
+
+    private static JsonSerializerOptions WithDecimalConverter(DecimalStringConverter converter)
     {
         var options = new JsonSerializerOptions(Options);
-        options.Converters.Insert(0, new InputDecimalStringConverter());
+        options.Converters.Insert(0, converter);
         return options;
+    }
+
+    private sealed class ComparableDecimalStringConverter : DecimalStringConverter
+    {
+        public override void Write(
+            Utf8JsonWriter writer,
+            decimal value,
+            JsonSerializerOptions options
+        ) => writer.WriteStringValue(value.ToString("G29", CultureInfo.InvariantCulture));
     }
 }

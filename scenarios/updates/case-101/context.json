@@ -1,0 +1,76 @@
+{
+  "context_version": "CTX-101-v2",
+  "purchase_orders": {
+    "schema_version": "1.0",
+    "orders": [
+      {
+        "order_id": "ORD-101",
+        "reference": "PO-2026-7101-LATE",
+        "status": "open",
+        "supplier_id": "SUP-101",
+        "buyer_id": "BUYER-101",
+        "currency": "EUR",
+        "lines": [
+          {
+            "line_id": "OL-101-01",
+            "sku": "GLOVE",
+            "description": "Safety gloves",
+            "explicit_aliases": [],
+            "quantity": "60",
+            "unit": "pcs",
+            "unit_net_price": "10.00",
+            "tax_rate": "0.20"
+          }
+        ]
+      }
+    ]
+  },
+  "goods_receipts": {
+    "schema_version": "1.0",
+    "availability": "available",
+    "receipts": [
+      {
+        "receipt_id": "REC-101-01",
+        "order_id": "ORD-101",
+        "order_line_id": "OL-101-01",
+        "accepted_quantity": "60",
+        "unit": "pcs",
+        "accepted_at": "2026-11-11",
+        "status": "accepted"
+      }
+    ]
+  },
+  "suppliers": {
+    "schema_version": "1.0",
+    "suppliers": [
+      {
+        "supplier_id": "SUP-101",
+        "legal_name": "Late Delivery Supplies GmbH",
+        "registration_id": "DE-SYN-10101",
+        "country": "DE",
+        "approved_bank_accounts": [
+          {
+            "iban": "DE00SYNTHETIC0000000101",
+            "bic": "SYNBDE00"
+          }
+        ]
+      }
+    ]
+  },
+  "buyers": {
+    "schema_version": "1.0",
+    "buyers": [
+      {
+        "buyer_id": "BUYER-101",
+        "legal_name": "Fictional Siteworks d.o.o.",
+        "registration_id": "RS-SYN-40101",
+        "country": "RS",
+        "explicit_aliases": []
+      }
+    ]
+  },
+  "invoice_history": {
+    "schema_version": "1.0",
+    "documents": []
+  }
+}

@@ -4,35 +4,26 @@ using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules.Matching;
 using InvoiceDesk.Core.Rules.Parties;
 using InvoiceDesk.Core.Storage;
-using InvoiceDesk.Core.Validation;
 
 namespace InvoiceDesk.Core.Cases;
 
 public sealed class CaseReader(CaseRepository repository)
 {
-    public AssessmentResponse AssessInvoice(string caseId)
+    public CaseList List()
     {
-        var invoiceCase = repository.Find(caseId)
-            ?? throw new InvoiceValidationException("/case_id", "Case does not exist.");
-        var latest = repository.ReadAssessmentOrLatestRevision(invoiceCase);
-        if (latest.Result is null)
-            throw new InvoiceValidationException(
-                "/case_id",
-                "Register invoice facts before requesting an assessment."
-            );
-
-        return new(
-            AssessmentId(latest.Number),
-            latest.Result,
-            !repository.InputsChanged(invoiceCase, latest)
-        );
-    }
-
-    public CaseSummary[] List() =>
-        repository
+        var cases = repository
             .List()
             .Select(item => Summarize(item.Case, item.Revision, item.InputsChanged))
             .ToArray();
+        return new(
+            new(
+                cases.Count(item => item.Tab == CaseTab.NeedsAttention),
+                cases.Count(item => item.Tab == CaseTab.ReadyForAccounting),
+                cases.Count(item => item.Tab == CaseTab.Closed)
+            ),
+            cases
+        );
+    }
 
     public CaseView? Read(string caseId)
     {
@@ -101,7 +92,8 @@ public sealed class CaseReader(CaseRepository repository)
             showDuplicateReading,
             proposals,
             effective,
-            openOrders
+            openOrders,
+            CaseIssues.For(revision.Result)
         );
     }
 
@@ -178,12 +170,10 @@ public sealed class CaseReader(CaseRepository repository)
     public RevisionView? ReadRevision(string caseId, int number) =>
         repository.ReadRevision(caseId, number) is { } revision ? View(revision) : null;
 
-    public CompanyData? ReadCompanyData(string caseId)
+    public CompanyData? ReadCompanyData(string caseId, int? revisionNumber = null)
     {
-        var invoiceCase = repository.Find(caseId);
-        return invoiceCase is null
-            ? null
-            : repository.ReadRevision(caseId, invoiceCase.CurrentRevision)?.Snapshot.Data;
+        int? number = revisionNumber ?? repository.Find(caseId)?.CurrentRevision;
+        return number is { } revision ? repository.ReadCompanyData(caseId, revision) : null;
     }
 
     internal static string AssessmentId(int revision) =>
@@ -221,18 +211,33 @@ public sealed class CaseReader(CaseRepository repository)
     {
         var facts = revision.Document?.Facts ?? revision.DuplicateAttempt?.Reading.Facts;
         var stage = Stage(revision, inputsChanged);
+        var mainIssue = CaseIssues.MainIssue(revision.Result);
         return new(
             invoiceCase.Id,
             invoiceCase.Origin,
             facts?.Number,
             facts?.Supplier.LegalName,
+            facts?.IssueDate,
             facts?.DeclaredTotal,
             facts?.Currency,
             revision.Result?.Decision,
             stage,
-            stage == CaseStage.Closed ? revision.OriginalInvoice?.DocumentId : null
+            Tab(stage),
+            stage == CaseStage.Closed ? revision.OriginalInvoice?.DocumentId : null,
+            mainIssue?.Check.Code,
+            mainIssue?.Owner,
+            revision.Result?.InputRevision,
+            revision.Result?.ContextVersion
         );
     }
+
+    private static CaseTab Tab(CaseStage stage) =>
+        stage switch
+        {
+            CaseStage.ReadyForAccounting => CaseTab.ReadyForAccounting,
+            CaseStage.Closed => CaseTab.Closed,
+            _ => CaseTab.NeedsAttention,
+        };
 
     private static CaseStage Stage(CaseRevision revision, bool inputsChanged)
     {

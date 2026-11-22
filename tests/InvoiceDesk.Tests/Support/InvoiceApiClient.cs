@@ -66,6 +66,9 @@ internal static class InvoiceApiClient
             new Dictionary<string, object?> { ["case_id"] = caseId, ["proposal"] = proposal }
         );
 
+    public static Task<HttpResponseMessage> Recheck(HttpClient browser, string caseId) =>
+        browser.PostAsync($"/api/cases/{caseId}/rechecks", null);
+
     public static Task<HttpResponseMessage> Confirm(
         HttpClient browser,
         string caseId,

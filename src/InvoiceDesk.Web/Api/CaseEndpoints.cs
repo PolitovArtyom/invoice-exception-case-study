@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Validation;
 using InvoiceDesk.Web.CaseLoading;
 
@@ -28,6 +29,7 @@ internal static class CaseEndpoints
         );
         cases.MapGet("/{caseId}/proposals/{proposalId}/confirmation-preview", ReadPreview);
         cases.MapPost("/{caseId}/confirmations", ConfirmProposal);
+        cases.MapPost("/{caseId}/rechecks", RecheckInvoice);
         cases.MapGet(
             "/{caseId}/documents/{reference:long}/pdf",
             (string caseId, long reference, CasePdfs pdfs) =>
@@ -41,6 +43,24 @@ internal static class CaseEndpoints
             "/{caseId}/revisions/{number:int}/original-pdf",
             (string caseId, int number, CasePdfs pdfs) => Pdf(pdfs.FindOriginal(caseId, number))
         );
+    }
+
+    private static IResult RecheckInvoice(string caseId, InvoiceRecheck recheck)
+    {
+        try
+        {
+            return recheck.Recheck(caseId, RevisionActor.Human) is { } response
+                ? Json(response)
+                : Results.NotFound();
+        }
+        catch (InvoiceValidationException error)
+        {
+            return BadRequest(error);
+        }
+        catch (UnsupportedInvoiceCaseException error)
+        {
+            return BadRequest(new InvoiceValidationException(error.Path, error.FieldMessage));
+        }
     }
 
     private static IResult ReadPreview(string caseId, string proposalId, CaseService service)

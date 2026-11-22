@@ -40,7 +40,7 @@ public sealed class StartupLoadingTests
 
     private static async Task AssertStartupCases(HttpClient page)
     {
-        var list = (await Read(page, "/api/cases")).AsArray();
+        var list = (await Read(page, "/api/cases"))["cases"]!.AsArray();
         Assert.Equal(
             new[]
             {
@@ -107,7 +107,7 @@ public sealed class StartupLoadingTests
         Assert.Equal("own", pending["case"]!["origin"]!.GetValue<string>());
         Assert.Equal("not_read", pending["stage"]!.GetValue<string>());
         var rows = await Read(page, "/api/cases");
-        AssertSameJson(Assert.Single(rows.AsArray())!["stage"], pending["stage"]);
+        AssertSameJson(Assert.Single(rows["cases"]!.AsArray())!["stage"], pending["stage"]);
         Assert.Equal(1, pending["current_revision"]!.GetValue<int>());
         Assert.Null(pending["revision"]!["document"]);
         Assert.Null(pending["revision"]!["result"]);

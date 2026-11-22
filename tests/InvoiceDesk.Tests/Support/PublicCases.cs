@@ -6,7 +6,7 @@ internal static class PublicCases
 {
     public const string CleanCase = "case-001";
 
-    private static string Root { get; } = FindDataRoot();
+    public static string Root { get; } = FindDataRoot();
 
     public static string Folder(string caseId) => Path.Combine(Root, "cases", caseId);
 

@@ -16,6 +16,7 @@ public sealed class AssignmentSchemas
 
     private AssignmentSchemas()
     {
+        ErrorMessages.Enum = "Allowed values: [[values]].";
         var build = new BuildOptions();
         var assembly = typeof(AssignmentSchemas).Assembly;
         foreach (

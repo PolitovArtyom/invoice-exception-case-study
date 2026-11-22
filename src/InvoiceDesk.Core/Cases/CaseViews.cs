@@ -15,7 +15,8 @@ public sealed record CaseView(
     bool ShowDuplicateReading,
     ProposalView[] Proposals,
     string? EffectiveProposalId,
-    PurchaseOrder[] OpenSupplierOrders
+    PurchaseOrder[] OpenSupplierOrders,
+    CaseIssue[] Issues
 );
 
 public sealed record RevisionView(
@@ -51,12 +52,22 @@ public sealed record CaseSummary(
     CaseOrigin Origin,
     string? Number,
     string? Supplier,
+    DateOnly? IssueDate,
     decimal? DeclaredTotal,
     string? Currency,
     Decision? Decision,
     CaseStage Stage,
-    string? OriginalDocumentId
+    CaseTab Tab,
+    string? OriginalDocumentId,
+    CheckCode? MainIssue,
+    IssueOwner? MainIssueOwner,
+    int? AssessedRevision,
+    string? ContextVersion
 );
+
+public sealed record CaseList(CaseStageCounts Counts, CaseSummary[] Cases);
+
+public sealed record CaseStageCounts(int NeedsAttention, int ReadyForAccounting, int Closed);
 
 public sealed record AssessmentResponse(
     string? AssessmentId,
@@ -67,6 +78,13 @@ public sealed record AssessmentResponse(
 public enum CaseStage
 {
     NotRead,
+    NeedsAttention,
+    ReadyForAccounting,
+    Closed,
+}
+
+public enum CaseTab
+{
     NeedsAttention,
     ReadyForAccounting,
     Closed,
