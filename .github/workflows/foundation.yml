@@ -1,0 +1,59 @@
+name: Foundation
+on:
+  push:
+    branches: ['stage/**', develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.3'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Release build, format and tests
+        run: |
+          dotnet build InvoiceDesk.slnx -c Release
+          dotnet format InvoiceDesk.slnx --verify-no-changes --no-restore
+          dotnet test InvoiceDesk.slnx -c Release --no-build
+      - name: Build and check the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run format:check
+          npm run build
+      - name: Compose smoke
+        run: |
+          docker compose up --build --wait
+          curl --fail --silent --show-error http://127.0.0.1:8080/health | jq -e '.status == "ok"'
+      - name: Stop Compose
+        if: always()
+        run: docker compose down
+      - name: Publish native adapter
+        run: dotnet publish src/InvoiceDesk.Adapter -c Release --self-contained false --no-restore -o dist/native
+      - name: Run the public acceptance subset
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001 --report-dir results/ci/public
+          jq -e '.summary | .cases_total == 1 and .cases_passed == 1 and .steps_total == 1 and .steps_passed == 1 and .adapter_failures == 0 and .critical_false_clear == 0' results/ci/public/eval-report.json
+      - name: Upload public runner report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: public-runner-report
+          path: results/ci/public/eval-report.*
