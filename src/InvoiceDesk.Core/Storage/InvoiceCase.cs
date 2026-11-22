@@ -6,7 +6,7 @@ internal sealed class InvoiceCase
 {
     public required string Id { get; init; }
 
-    public required string Origin { get; init; }
+    public required CaseOrigin Origin { get; init; }
 
     public required DateOnly AsOf { get; init; }
 

@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Rules;
@@ -29,7 +27,7 @@ public static class Adapter
     {
         try
         {
-            return Submit(Parse(stdin), stdout, stateDir);
+            return Submit(IntakeValidation.ReadStep(stdin.ReadToEnd()), stdout, stateDir);
         }
         catch (InvoiceValidationException error)
         {
@@ -47,39 +45,13 @@ public static class Adapter
         }
     }
 
-    private static JsonNode Parse(TextReader stdin)
+    private static int Submit(StepInput input, TextWriter stdout, string stateDir)
     {
-        try
-        {
-            var input = JsonNode.Parse(stdin.ReadToEnd());
-            AssignmentSchemas.Instance.Validate("step-input", input);
-            return input!;
-        }
-        catch (JsonException)
-        {
-            throw new InvoiceValidationException("", "Expected one JSON step input.");
-        }
-    }
-
-    private static int Submit(JsonNode input, TextWriter stdout, string stateDir)
-    {
-        if (input["proposals"] is not null || input["confirmations"] is not null)
+        if (input.Proposals is not null || input.Confirmations is not null)
             throw new UnsupportedInvoiceCaseException("proposals and confirmations");
 
-        string caseId = input["case_id"]!.GetValue<string>();
-        var asOf = IntakeValidation.ReadDate(input["as_of"]!.GetValue<string>(), "/as_of");
-        int step = input["step"]!.GetValue<int>();
-
-        var companyData = input["context"] is { } context
-            ? IntakeValidation.ReadCompanyData(context, "/context")
-            : null;
-        var reading = input["document"] is { } document
-            ? new InvoiceReading(
-                IntakeValidation.ReadFacts(document["facts"], "/document/facts"),
-                document["content_sha256"]!.GetValue<string>(),
-                null,
-                "runner"
-            )
+        var reading = input.Document is { } document
+            ? new InvoiceReading(document.Facts, document.ContentSha256, null, ReadingOrigin.Runner)
             : null;
 
         Directory.CreateDirectory(stateDir);
@@ -96,14 +68,16 @@ public static class Adapter
             TimeProvider.System
         );
         var result = cases.SubmitCaseInputs(
-            new(caseId, "assignment", asOf, []),
-            step,
-            companyData,
+            new(input.CaseId, CaseOrigin.Assignment, input.AsOf, []),
+            input.Step,
+            input.Context,
             reading
         );
 
         stdout.WriteLine(InvoiceJson.Write(result));
-        Console.Error.WriteLine($"Saved {caseId} revision {result.InputRevision} via adapter.");
+        Console.Error.WriteLine(
+            $"Saved {input.CaseId} revision {result.InputRevision} via adapter."
+        );
         return 0;
     }
 

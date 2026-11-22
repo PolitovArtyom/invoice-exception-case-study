@@ -9,28 +9,22 @@ internal sealed class BankAccountCheck : IDocumentCheck
 
     public Verdict Evaluate(CheckContext context)
     {
-        var supplier = context.Supplier;
-        UnsupportedInvoiceCaseException.Require(
-            supplier is not null,
-            Code,
-            "without a resolved supplier"
-        );
-
         string? iban = context.Facts.Bank.Iban;
+        if (iban is null)
+            return Verdict.MissingFact(RequiredFact.BankAccount);
+
+        if (context.Supplier is not { } supplier)
+            return Verdict.DependsOn(CheckCode.SupplierIdentity);
+
         string? normalized = InvoiceText.Iban(iban);
         var approved = supplier.ApprovedBankAccounts.Select(account => account.Iban).ToArray();
-        UnsupportedInvoiceCaseException.Require(
-            normalized is not null
-                && approved.Any(account => InvoiceText.Iban(account) == normalized),
-            Code,
-            "for an absent or unapproved account"
-        );
 
-        return Verdict.Pass(
-            new Comparison(
-                Actual: [Operand.Invoice("iban", iban)],
-                Expected: [Operand.Directory("approved_accounts", approved)]
-            )
+        var comparison = new Comparison(
+            Actual: [Operand.Invoice("iban", iban)],
+            Expected: [Operand.Directory("approved_accounts", approved)]
         );
+        return approved.Any(account => InvoiceText.Iban(account) == normalized)
+            ? Verdict.Pass(comparison)
+            : Verdict.Fail(Severity.Blocked, comparison);
     }
 }

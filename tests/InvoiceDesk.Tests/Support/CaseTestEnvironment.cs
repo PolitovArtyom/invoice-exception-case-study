@@ -19,8 +19,8 @@ internal sealed class CaseTestEnvironment : IDisposable
 
     public string DatabasePath => Path.Combine(_directory.Path, "invoice.sqlite");
 
-    public string CopyCase(string caseId) =>
-        CopyCaseFolder(caseId, Path.Combine(DatasetPath, "cases", caseId));
+    public string CopyCase(string caseId, bool own = false) =>
+        CopyCaseFolder(caseId, Path.Combine(own ? ScenarioPath : DatasetPath, "cases", caseId));
 
     public string AddReviewerCase()
     {

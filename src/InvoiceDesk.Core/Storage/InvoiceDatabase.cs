@@ -25,11 +25,13 @@ public sealed class InvoiceDatabase(DbContextOptions<InvoiceDatabase> options) :
         var cases = builder.Entity<InvoiceCase>();
         cases.ToTable("Cases");
         cases.Ignore(row => row.Metadata);
+        cases.Property(row => row.Origin).HasConversion<string>();
         cases.Property(row => row.AsOf).HasConversion<string>();
         cases.Property(row => row.Sources).HasConversion<InvoiceJsonConversion<CaseSources>>();
 
         var documents = builder.Entity<InvoiceDocument>();
         documents.ToTable("Documents");
+        documents.Property(row => row.ReadingOrigin).HasConversion<string>();
         documents.Property(row => row.Facts).HasConversion<InvoiceJsonConversion<InvoiceFacts>>();
         documents
             .Property(row => row.Source)

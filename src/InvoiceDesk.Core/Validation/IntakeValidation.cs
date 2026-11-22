@@ -9,9 +9,43 @@ namespace InvoiceDesk.Core.Validation;
 
 public static class IntakeValidation
 {
-    public static InvoiceFacts ReadFacts(JsonNode? json, string prefix)
+    public static StepInput ReadStep(string input, bool includeDocument = true)
+    {
+        JsonNode? json;
+        try
+        {
+            json = JsonNode.Parse(input);
+        }
+        catch (JsonException)
+        {
+            throw new InvoiceValidationException("", "Expected one JSON step input.");
+        }
+
+        if (!includeDocument && json is JsonObject envelope)
+            envelope.Remove("document");
+
+        var step = Read<StepInput>("step-input", json);
+        if (step.Context is { } context)
+            ValidateCompanyData(context, "/context");
+        if (step.Document is { } document)
+            ValidateFacts(document.Facts, json!["document"]!["facts"]!, "/document/facts");
+        return step;
+    }
+
+    public static InvoiceFacts ReadAgentFacts(JsonNode? json, string prefix)
     {
         var facts = Read<InvoiceFacts>("extraction", json, prefix);
+        ValidateFacts(facts, json!, prefix, requireCompleteReading: true);
+        return facts;
+    }
+
+    private static void ValidateFacts(
+        InvoiceFacts facts,
+        JsonNode json,
+        string prefix,
+        bool requireCompleteReading = false
+    )
+    {
         RequireUnique(
             facts.Lines.Select(line => line.LineId),
             prefix + "/lines",
@@ -24,7 +58,7 @@ public static class IntakeValidation
         )
         {
             if (
-                !JsonFields.TryResolve(json!, missing.FieldPath, out var value)
+                !JsonFields.TryResolve(json, missing.FieldPath, out var value)
                 || value is not null
                 || !missingPaths.Add(missing.FieldPath)
             )
@@ -34,14 +68,15 @@ public static class IntakeValidation
                 );
         }
 
-        foreach (string path in NullFields(json, ""))
-        {
-            if (!missingPaths.Contains(path))
-                throw new InvoiceValidationException(
-                    prefix + path,
-                    "A null invoice field requires a missing reason."
-                );
-        }
+        if (
+            requireCompleteReading
+            && NullFields(json, "").FirstOrDefault(path => !missingPaths.Contains(path))
+                is { } fieldWithoutReason
+        )
+            throw new InvoiceValidationException(
+                prefix + fieldWithoutReason,
+                "A null invoice field requires a missing reason."
+            );
 
         foreach (var (evidence, index) in facts.Evidence.Select((item, index) => (item, index)))
         {
@@ -54,21 +89,24 @@ public static class IntakeValidation
             if (
                 fieldPath.StartsWith("/evidence/", StringComparison.Ordinal)
                 || fieldPath.StartsWith("/missing_fields/", StringComparison.Ordinal)
-                || !JsonFields.TryResolve(json!, fieldPath, out var value)
-                || value is not JsonValue
+                || !JsonFields.TryResolve(json, fieldPath, out var value)
+                || (value is not JsonValue && (value is not null || requireCompleteReading))
             )
                 throw new InvoiceValidationException(
                     $"{prefix}/evidence/{index}/field_path",
                     "Must reference a printed invoice field."
                 );
         }
-
-        return facts;
     }
 
     public static CompanyData ReadCompanyData(JsonNode? json, string prefix)
     {
         var snapshot = Read<CompanyData>("context", json, prefix);
+        ValidateCompanyData(snapshot, prefix);
+        return snapshot;
+    }
+
+    private static void ValidateCompanyData(CompanyData snapshot, string prefix) =>
         RequireUnique(
             snapshot
                 .PurchaseOrders.Orders.SelectMany(order => order.Lines)
@@ -76,13 +114,6 @@ public static class IntakeValidation
             prefix + "/purchase_orders/orders",
             "order line ID"
         );
-        return snapshot;
-    }
-
-    public static DateOnly ReadDate(string? value, string path) =>
-        CalendarDateConverter.TryRead(value, out var date)
-            ? date
-            : throw new InvoiceValidationException(path, CalendarDateConverter.InvalidDateMessage);
 
     public static T Read<T>(string schema, JsonNode? json, string prefix = "")
     {

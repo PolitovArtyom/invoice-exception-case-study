@@ -87,19 +87,19 @@ public sealed class InvoiceTools(
                     throw new InvoiceValidationException("/source", "Select a PDF from open_case.");
 
                 var view = RequireCase(case_id);
-                var reading = IntakeValidation.ReadFacts(
+                var reading = IntakeValidation.ReadAgentFacts(
                     JsonNode.Parse(facts.GetRawText()),
                     "/facts"
                 );
                 var pdf = folders.ReadSource(
                     view.Case,
-                    source.Root,
+                    ReadSourceRoot(source.Root),
                     source.RelativePath,
                     reading.DocumentId
                 );
                 var assessment = cases.RegisterInvoice(
                     case_id,
-                    new InvoiceReading(reading, pdf.ContentSha256, pdf, "read by the agent")
+                    new InvoiceReading(reading, pdf.ContentSha256, pdf, ReadingOrigin.Agent)
                 );
                 logger.LogInformation(
                     "Registered invoice document {DocumentId} for case {CaseId} at revision {Revision}",
@@ -156,6 +156,14 @@ public sealed class InvoiceTools(
             : null;
 
     private CaseView RequireCase(string caseId) => cases.Read(caseId) ?? throw UnknownCase();
+
+    private static SourceRoot ReadSourceRoot(string root) =>
+        root switch
+        {
+            "public" => SourceRoot.Public,
+            "own" => SourceRoot.Own,
+            _ => throw new InvoiceValidationException("/source/root", "Expected public or own."),
+        };
 
     private static InvoiceValidationException UnknownCase() =>
         new("/case_id", "Case does not exist.");

@@ -10,9 +10,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace InvoiceDesk.Core.Storage.Migrations
 {
     [DbContext(typeof(InvoiceDatabase))]
-    [Migration("20261122170604_InitialInvoiceStorage")]
+    [Migration("20261122175253_InitialInvoiceStorage")]
     partial class InitialInvoiceStorage
     {
+        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
@@ -55,10 +56,6 @@ namespace InvoiceDesk.Core.Storage.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("CaseId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ContextVersion")
                         .IsRequired()
                         .HasColumnType("TEXT");
 

@@ -63,16 +63,18 @@ internal static class InvoiceMatches
             : InvoiceText.SameName(party.LegalName, buyer.LegalName)
                 || buyer.ExplicitAliases.Any(alias => InvoiceText.SameName(party.LegalName, alias));
 
-    private static string? MatchReason(InvoiceLine line, PurchaseOrderLine candidate)
+    private static LineMatchReason? MatchReason(InvoiceLine line, PurchaseOrderLine candidate)
     {
         if (
             line.Sku is not null
             && InvoiceText.Identifier(line.Sku) == InvoiceText.Identifier(candidate.Sku)
         )
-            return "sku";
+            return LineMatchReason.Sku;
         if (candidate.ExplicitAliases.Any(alias => InvoiceText.SameName(line.Description, alias)))
-            return "explicit_alias";
-        return InvoiceText.SameName(line.Description, candidate.Description) ? "description" : null;
+            return LineMatchReason.ExplicitAlias;
+        return InvoiceText.SameName(line.Description, candidate.Description)
+            ? LineMatchReason.Description
+            : null;
     }
 
     private static T? Unique<T>(IEnumerable<T> matches)
@@ -82,5 +84,12 @@ internal static class InvoiceMatches
         return firstTwo.Length == 1 ? firstTwo[0] : null;
     }
 
-    internal sealed record OrderLineMatch(PurchaseOrderLine OrderLine, string Reason);
+    internal sealed record OrderLineMatch(PurchaseOrderLine OrderLine, LineMatchReason Reason);
+}
+
+internal enum LineMatchReason
+{
+    Sku,
+    ExplicitAlias,
+    Description,
 }

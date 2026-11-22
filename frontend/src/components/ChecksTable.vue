@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import Button from 'primevue/button'
-import type { InvoiceCheck } from '../api'
+import type { InvoiceCheck, InvoiceFacts } from '../api'
+import { actualOperands, checkTitle } from '../checkPresentation'
 import CheckOperands from './CheckOperands.vue'
+import CheckVerdict from './CheckVerdict.vue'
 
-const props = defineProps<{ checks: InvoiceCheck[] }>()
+const props = defineProps<{ checks: InvoiceCheck[]; facts: InvoiceFacts }>()
 const showPassed = ref(false)
 const passed = computed(
   () => props.checks.filter((check) => check.status === 'pass').length,
@@ -14,21 +16,6 @@ const visibleChecks = computed(() =>
     ? props.checks
     : props.checks.filter((check) => check.status !== 'pass'),
 )
-
-const titles: Record<string, string> = {
-  DOCUMENT_CONFLICT: 'Document conflict',
-  SUPPLIER_IDENTITY: 'Supplier identity',
-  BUYER_IDENTITY: 'Buyer identity',
-  ORDER_MATCH: 'Purchase order match',
-  CURRENCY_MATCH: 'Currency match',
-  LINE_MATCH: 'Invoice line match',
-  QTY_RECEIVED: 'Received quantity',
-  QTY_ORDER_REMAINING: 'Remaining order quantity',
-  UNIT_PRICE: 'Unit price',
-  LINE_ARITHMETIC: 'Line arithmetic',
-  TOTALS_ARITHMETIC: 'Totals arithmetic',
-  BANK_ACCOUNT: 'Bank account',
-}
 </script>
 
 <template>
@@ -58,7 +45,6 @@ const titles: Record<string, string> = {
             <th scope="col">Check</th>
             <th scope="col">Object</th>
             <th scope="col">Verdict</th>
-            <th scope="col">Waits for</th>
             <th scope="col">Comparison</th>
           </tr>
         </thead>
@@ -68,25 +54,18 @@ const titles: Record<string, string> = {
             :key="`${check.code}/${check.object_id}`"
           >
             <td>
-              <strong>{{ titles[check.code] ?? check.code }}</strong><small
+              <strong>{{ checkTitle(check.code) }}</strong><small
                 class="mono"
                 >{{ check.code }}</small
               >
             </td>
             <td class="mono">{{ check.object_id }}</td>
+            <td><CheckVerdict :check="check" /></td>
             <td>
-              <span v-if="check.status === 'pass'" class="pass">✓ Pass</span>
-              <span v-else>{{ check.status.replaceAll('_', ' ') }}</span>
-              <small v-if="check.severity">{{
-                check.severity.replaceAll('_', ' ')
-              }}</small>
-            </td>
-            <td class="mono">{{ check.depends_on ?? '—' }}</td>
-            <td>
-              <details>
+              <details v-if="check.actual && check.expected">
                 <summary>View operands</summary>
                 <p class="comparison-label">Actual</p>
-                <CheckOperands :operands="check.actual" />
+                <CheckOperands :operands="actualOperands(facts, check)" />
                 <p class="comparison-label">Expected</p>
                 <CheckOperands :operands="check.expected" />
               </details>

@@ -1,15 +1,17 @@
 import type { CaseStage } from './caseStage'
 
+type CaseOrigin = 'assignment' | 'own'
+export type ReadingOrigin = 'fixture' | 'agent' | 'runner'
+
 export interface CaseSummary {
   case_id: string
-  origin: string
+  origin: CaseOrigin
   number: string | null
   supplier: string | null
   declared_total: string | null
   currency: string | null
   decision: string | null
   stage: CaseStage
-  reading_origin: string | null
 }
 
 export interface InvoiceFacts {
@@ -20,8 +22,35 @@ export interface InvoiceFacts {
   purchase_order_reference: string | null
   supplier: { legal_name: string | null }
   buyer: { legal_name: string | null }
+  declared_subtotal: string
+  declared_tax_total: string
   declared_total: string
+  lines: InvoiceLine[]
   evidence: InvoiceEvidence[]
+  missing_fields: InvoiceMissingField[]
+}
+
+export interface InvoiceLine {
+  line_id: string
+  description: string
+  quantity: string
+  unit: string
+  unit_net_price: string
+  tax_rate: string
+  declared_net_amount: string
+  declared_tax_amount: string | null
+}
+
+export interface InvoiceLineResult {
+  document_line_id: string
+  order_line_id: string | null
+  calculated_net: string
+  calculated_tax: string
+  ordered: string | null
+  received: string | null
+  previously_invoiced: string | null
+  available_to_invoice: string | null
+  remaining_on_order: string | null
 }
 
 export interface InvoiceEvidence {
@@ -30,10 +59,16 @@ export interface InvoiceEvidence {
   excerpt: string
 }
 
+export interface InvoiceMissingField {
+  field_path: string
+  reason: 'not_present_in_document' | 'illegible'
+}
+
 export interface InvoiceResult {
   decision: string
   matched_order_id: string | null
   checks: InvoiceCheck[]
+  lines: InvoiceLineResult[]
   totals: {
     calculated_subtotal: string
     calculated_tax_total: string
@@ -47,8 +82,8 @@ export interface InvoiceCheck {
   status: string
   severity: string | null
   depends_on: string | null
-  actual: Record<string, CheckOperand>
-  expected: Record<string, CheckOperand>
+  actual: Record<string, CheckOperand> | null
+  expected: Record<string, CheckOperand> | null
 }
 
 export interface CheckOperand {
@@ -57,7 +92,7 @@ export interface CheckOperand {
 }
 
 export interface CaseView {
-  case: { case_id: string; origin: string }
+  case: { case_id: string; origin: CaseOrigin }
   current_revision: number
   stage: CaseStage
   revision: {
@@ -67,7 +102,7 @@ export interface CaseView {
       reference: number
       source: { relative_path: string } | null
       facts: InvoiceFacts
-      reading_origin: string
+      reading_origin: ReadingOrigin
     } | null
     result: InvoiceResult | null
   }

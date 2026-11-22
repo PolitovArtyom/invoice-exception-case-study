@@ -17,14 +17,14 @@ internal sealed record LineQuantities(
         PurchaseOrder order,
         PurchaseOrderLine line,
         CompanyData companyData,
-        InvoiceBusinessKey key
+        InvoiceBusinessKey? key
     )
     {
         decimal previous = companyData
             .InvoiceHistory.Documents.Where(invoice =>
                 invoice.Status == PreviousInvoiceStatus.Counted
                 && invoice.MatchedOrderId == order.OrderId
-                && !key.Matches(invoice)
+                && key?.Matches(invoice) != true
             )
             .SelectMany(invoice => invoice.Lines)
             .Where(invoiceLine => invoiceLine.OrderLineId == line.LineId)

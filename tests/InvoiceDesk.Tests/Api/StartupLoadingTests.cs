@@ -10,10 +10,20 @@ public sealed class StartupLoadingTests
     public async Task Should_register_only_allow_listed_facts_when_a_fresh_app_starts()
     {
         using var environment = new CaseTestEnvironment();
-        string cleanFolder = environment.CopyCase(PublicCases.CleanCase);
-        environment.CopyCase("case-002");
-        environment.CopyCase("case-004");
-        environment.CopyCase("case-010");
+        environment.CopyCase(PublicCases.CleanCase);
+        foreach (
+            string id in new[]
+            {
+                "case-002",
+                "case-003",
+                "case-004",
+                "case-005",
+                "case-006",
+                "case-007",
+                "case-010",
+            }
+        )
+            environment.CopyCase(id);
         await using (var app = environment.Start())
         {
             using var page = app.CreateClient();
@@ -21,7 +31,6 @@ public sealed class StartupLoadingTests
             await AssertStartupCases(page);
         }
 
-        File.WriteAllText(Path.Combine(cleanFolder, "case.json"), "Existing case must be skipped.");
         await using var restarted = environment.Start();
         using var restartedPage = restarted.CreateClient();
         await AssertStartupCases(restartedPage);
@@ -31,21 +40,43 @@ public sealed class StartupLoadingTests
     {
         var list = (await Read(page, "/api/cases")).AsArray();
         Assert.Equal(
-            new[] { "case-001", "case-002", "case-004", "case-010" },
+            new[]
+            {
+                "case-001",
+                "case-002",
+                "case-003",
+                "case-004",
+                "case-005",
+                "case-006",
+                "case-007",
+                "case-010",
+            },
             list.Select(row => row!["case_id"]!.GetValue<string>())
         );
         var clean = (await Read(page, "/api/cases/case-001"))["revision"]!;
-        Assert.Equal(
-            "loaded from test data, not read by the agent",
-            clean["document"]!["reading_origin"]!.GetValue<string>()
-        );
+        Assert.Equal("fixture", clean["document"]!["reading_origin"]!.GetValue<string>());
         CleanAssessment.AssertResult(clean["result"]!, 1);
+
+        foreach (
+            var (id, decision) in new[]
+            {
+                ("case-002", "clear"),
+                ("case-003", "blocked"),
+                ("case-005", "blocked"),
+                ("case-007", "blocked"),
+            }
+        )
+        {
+            var loaded = (await Read(page, $"/api/cases/{id}"))["revision"]!;
+            Assert.Equal("fixture", loaded["document"]!["reading_origin"]!.GetValue<string>());
+            Assert.Equal(decision, loaded["result"]!["decision"]!.GetValue<string>());
+        }
 
         foreach (
             var (id, version) in new[]
             {
-                ("case-002", "CTX-002-v1"),
                 ("case-004", "CTX-004-v1"),
+                ("case-006", "CTX-006-v1"),
                 ("case-010", "CTX-010-v1"),
             }
         )
@@ -62,7 +93,11 @@ public sealed class StartupLoadingTests
     public async Task Should_leave_facts_unread_when_a_reviewer_adds_an_unlisted_case()
     {
         using var environment = new CaseTestEnvironment();
-        environment.AddReviewerCase();
+        string folder = environment.AddReviewerCase();
+        string stepPath = Path.Combine(folder, "steps", "step-001.json");
+        var step = JsonNode.Parse(File.ReadAllText(stepPath))!;
+        step["document"]!["facts"]!.AsObject().Remove("lines");
+        File.WriteAllText(stepPath, step.ToJsonString());
         await using var app = environment.Start();
         using var page = app.CreateClient();
         await using var mcp = await ConnectMcp(app);
@@ -107,27 +142,87 @@ public sealed class StartupLoadingTests
         );
     }
 
-    [Fact]
-    public async Task Should_load_other_cases_when_one_case_folder_is_malformed()
+    [Theory]
+    [InlineData("case.json")]
+    [InlineData("steps/step-001.json")]
+    public async Task Should_fail_startup_when_a_case_input_id_differs_from_the_folder_name(
+        string relativePath
+    )
     {
         using var environment = new CaseTestEnvironment();
-        environment.CopyCase(PublicCases.CleanCase);
-        environment.AddReviewerCase();
-        string malformed = Path.Combine(environment.ScenarioPath, "cases", "case-900");
-        Directory.CreateDirectory(malformed);
-        var manifest = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(PublicCases.Folder(PublicCases.CleanCase), "case.json"))
-        )!;
-        manifest["case_id"] = "case-900";
-        File.WriteAllText(Path.Combine(malformed, "case.json"), manifest.ToJsonString());
-
+        string folder = environment.CopyCase(PublicCases.CleanCase);
+        string path = Path.Combine(folder, relativePath);
+        var input = JsonNode.Parse(File.ReadAllText(path))!;
+        input["case_id"] = "case-900";
+        File.WriteAllText(path, input.ToJsonString());
         await using var app = environment.Start();
-        using var page = app.CreateClient();
 
-        var cases = (await Read(page, "/api/cases")).AsArray();
-        Assert.Equal(
-            new[] { "case-001", "case-911" },
-            cases.Select(item => item!["case_id"]!.GetValue<string>())
+        var error = Assert.Throws<InvalidDataException>(() => app.CreateClient());
+
+        Assert.Contains(folder, error.Message, StringComparison.Ordinal);
+        Assert.Contains(relativePath, error.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "case_id 'case-900' must match folder name 'case-001'",
+            error.Message,
+            StringComparison.Ordinal
         );
+    }
+
+    [Fact]
+    public async Task Should_name_both_folders_when_a_saved_case_id_is_reused_across_roots()
+    {
+        using var environment = new CaseTestEnvironment();
+        string publicFolder = environment.CopyCase(PublicCases.CleanCase);
+        await using (var app = environment.Start())
+        {
+            using var page = app.CreateClient();
+            var saved = await Read(page, "/api/cases/case-001");
+            CleanAssessment.AssertResult(saved["revision"]!["result"]!, 1);
+        }
+
+        string ownFolder = environment.CopyCase(PublicCases.CleanCase, own: true);
+        await using var restarted = environment.Start();
+
+        var error = Assert.Throws<InvalidDataException>(() => restarted.CreateClient());
+        Assert.Contains("Case ID 'case-001'", error.Message, StringComparison.Ordinal);
+        Assert.Contains(publicFolder, error.Message, StringComparison.Ordinal);
+        Assert.Contains(ownFolder, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Should_fail_startup_when_the_fixture_hash_differs_from_the_manifest()
+    {
+        using var environment = new CaseTestEnvironment();
+        string folder = environment.CopyCase(PublicCases.CleanCase);
+        string path = Path.Combine(folder, "case.json");
+        var manifest = JsonNode.Parse(File.ReadAllText(path))!;
+        manifest["input_documents"]![0]!["content_sha256"] = new string('0', 64);
+        File.WriteAllText(path, manifest.ToJsonString());
+        await using var app = environment.Start();
+
+        var error = Assert.Throws<InvalidDataException>(() => app.CreateClient());
+        Assert.Contains(folder, error.Message, StringComparison.Ordinal);
+        Assert.Contains("DOC-001", error.Message, StringComparison.Ordinal);
+        Assert.Contains("SHA-256", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Should_fail_startup_when_the_first_step_of_a_saved_case_is_missing()
+    {
+        using var environment = new CaseTestEnvironment();
+        string folder = environment.CopyCase(PublicCases.CleanCase);
+        await using (var app = environment.Start())
+        {
+            using var page = app.CreateClient();
+            var saved = await Read(page, "/api/cases/case-001");
+            CleanAssessment.AssertResult(saved["revision"]!["result"]!, 1);
+        }
+
+        File.Delete(Path.Combine(folder, "steps", "step-001.json"));
+        await using var restarted = environment.Start();
+
+        var error = Assert.Throws<InvalidDataException>(() => restarted.CreateClient());
+        Assert.Contains(folder, error.Message, StringComparison.Ordinal);
+        Assert.Contains("First step file is missing", error.Message, StringComparison.Ordinal);
     }
 }

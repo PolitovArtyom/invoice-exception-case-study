@@ -1,4 +1,5 @@
 using InvoiceDesk.Core.Model.Results;
+using InvoiceDesk.Core.Rules.Matching;
 
 namespace InvoiceDesk.Core.Rules.Quantities;
 
@@ -8,33 +9,27 @@ internal sealed class QuantityOrderRemainingCheck : ILineCheck
 
     public Verdict Evaluate(CheckContext context, MatchedLine line)
     {
-        var invoice = line.Invoice;
-        var quantities = line.Quantities;
-        UnsupportedInvoiceCaseException.Require(
-            quantities is not null,
-            Code,
-            $"without order quantities for {invoice.LineId}"
-        );
-        UnsupportedInvoiceCaseException.Require(
-            invoice.Quantity <= quantities.RemainingOnOrder,
-            Code,
-            $"above the outstanding order quantity for {invoice.LineId}"
-        );
+        if (OrderLineComparison.NotComparable(context, line) is { } notComparable)
+            return notComparable;
 
-        return Verdict.Pass(
-            new Comparison(
-                Actual:
-                [
-                    Operand.Invoice("quantity", invoice.Quantity),
-                    Operand.Invoice("unit", invoice.Unit),
-                ],
-                Expected:
-                [
-                    Operand.Order("ordered", quantities.Ordered),
-                    Operand.History("previously_invoiced", quantities.PreviouslyInvoiced),
-                    Operand.Calculated("remaining_on_order", quantities.RemainingOnOrder),
-                ]
-            )
+        var invoice = line.Invoice;
+        var quantities = line.Quantities!;
+
+        var comparison = new Comparison(
+            Actual:
+            [
+                Operand.Invoice("quantity", invoice.Quantity),
+                Operand.Invoice("unit", invoice.Unit),
+            ],
+            Expected:
+            [
+                Operand.Order("ordered", quantities.Ordered),
+                Operand.History("previously_invoiced", quantities.PreviouslyInvoiced),
+                Operand.Calculated("remaining_on_order", quantities.RemainingOnOrder),
+            ]
         );
+        return invoice.Quantity <= quantities.RemainingOnOrder
+            ? Verdict.Pass(comparison)
+            : Verdict.Fail(Severity.Blocked, comparison);
     }
 }

@@ -4,8 +4,10 @@
 
 namespace InvoiceDesk.Core.Storage.Migrations
 {
+    /// <inheritdoc />
     public partial class InitialInvoiceStorage : Migration
     {
+        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -32,7 +34,6 @@ namespace InvoiceDesk.Core.Storage.Migrations
                         .Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     CaseId = table.Column<string>(type: "TEXT", nullable: false),
-                    ContextVersion = table.Column<string>(type: "TEXT", nullable: false),
                     Data = table.Column<string>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
@@ -139,6 +140,7 @@ namespace InvoiceDesk.Core.Storage.Migrations
             );
         }
 
+        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(name: "Revisions");

@@ -1,51 +1,64 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
-using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Validation;
 
 namespace InvoiceDesk.Web.CaseLoading;
 
 public sealed class CaseLoader(CaseFolders folders, CaseService cases, ILogger<CaseLoader> logger)
 {
-    private static readonly HashSet<string> FixtureFacts = ["case-001"];
+    private static readonly HashSet<string> FixtureFacts =
+    [
+        "case-001",
+        "case-002",
+        "case-003",
+        "case-005",
+        "case-007",
+    ];
 
     public void Load()
     {
-        foreach (string root in new[] { "public", "own" })
+        var foldersByCaseId = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var root in new[] { SourceRoot.Public, SourceRoot.Own })
         {
             foreach (string directory in folders.CaseDirectories(root))
             {
                 try
                 {
-                    LoadCase(root, directory);
+                    LoadCase(root, directory, foldersByCaseId);
                 }
                 catch (Exception error)
-                    when (error
-                            is IOException
-                                or UnauthorizedAccessException
-                                or InvalidDataException
-                                or JsonException
-                                or InvoiceValidationException
-                                or UnsupportedInvoiceCaseException
-                                or ArgumentException
-                    )
                 {
-                    logger.LogError(error, "Skipped case folder {CaseFolder}", directory);
+                    string reason = error is InvoiceValidationException validation
+                        ? string.Join(
+                            "; ",
+                            validation.Details.Select(detail => $"{detail.Path}: {detail.Message}")
+                        )
+                        : error.Message;
+                    throw new InvalidDataException(
+                        $"Could not load case folder '{directory}': {reason}",
+                        error
+                    );
                 }
             }
         }
     }
 
-    private void LoadCase(string root, string directory)
+    private void LoadCase(
+        SourceRoot root,
+        string directory,
+        Dictionary<string, string> foldersByCaseId
+    )
     {
         string folderName = Path.GetFileName(directory);
-        if (cases.Exists(folderName))
-            return;
-
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "case.json")));
         var input = IntakeValidation.Read<CaseManifest>("case", manifest);
+        RequireMatchingCaseId(folderName, input.CaseId, "case.json");
+        if (!foldersByCaseId.TryAdd(input.CaseId, directory))
+            throw new InvalidDataException(
+                $"Case ID '{input.CaseId}' already appears in '{foldersByCaseId[input.CaseId]}'."
+            );
+
         var sources = input
             .InputDocuments.Select(document => new InvoiceSource(
                 root,
@@ -56,24 +69,27 @@ public sealed class CaseLoader(CaseFolders folders, CaseService cases, ILogger<C
             .ToArray();
         var metadata = new CaseMetadata(
             input.CaseId,
-            root == "public" ? "assignment" : "own",
+            root == SourceRoot.Public ? CaseOrigin.Assignment : CaseOrigin.Own,
             input.AsOf,
             sources
         );
         string stepPath = CaseFolders.FindFile(directory, input.Steps[0].Input)
             ?? throw new FileNotFoundException("First step file is missing.", input.Steps[0].Input);
-        var step =
-            JsonNode.Parse(File.ReadAllText(stepPath)) as JsonObject
-            ?? throw new InvalidDataException("First step must be a JSON object.");
-
-        var companyData = IntakeValidation.ReadCompanyData(step["context"], "/context");
-        var reading = FixtureFacts.Contains(metadata.CaseId)
+        bool includeDocument = FixtureFacts.Contains(metadata.CaseId);
+        var step = IntakeValidation.ReadStep(File.ReadAllText(stepPath), includeDocument);
+        RequireMatchingCaseId(folderName, step.CaseId, input.Steps[0].Input);
+        var companyData = step.Context
+            ?? throw new InvalidDataException("First step company data is missing.");
+        var reading = includeDocument
             ? ReadFixture(
                 metadata,
-                step["document"] as JsonObject
-                    ?? throw new InvalidDataException("First step document is missing.")
+                step.Document ?? throw new InvalidDataException("First step document is missing.")
             )
             : null;
+
+        if (cases.Exists(folderName))
+            return;
+
         if (cases.LoadCase(metadata, companyData, reading))
             logger.LogInformation(
                 "Loaded case {CaseId} with snapshot {ContextVersion} and fixture facts {HasFacts}",
@@ -83,17 +99,28 @@ public sealed class CaseLoader(CaseFolders folders, CaseService cases, ILogger<C
             );
     }
 
-    private static InvoiceReading ReadFixture(CaseMetadata metadata, JsonObject document)
+    private static void RequireMatchingCaseId(string folderName, string caseId, string fileName)
     {
-        var facts = IntakeValidation.ReadFacts(document["facts"], "/document/facts");
-        if (
-            document["content_sha256"] is not JsonValue value
-            || !value.TryGetValue<string>(out string? hash)
-        )
-            throw new InvalidDataException("First step document must include its hash.");
+        if (caseId != folderName)
+            throw new InvalidDataException(
+                $"{fileName}: case_id '{caseId}' must match folder name '{folderName}'."
+            );
+    }
 
-        var source = metadata.Sources.FirstOrDefault(item => item.DocumentId == facts.DocumentId);
-        return new(facts, hash, source, InvoiceReading.FixtureReadingOrigin);
+    private static InvoiceReading ReadFixture(CaseMetadata metadata, StepDocument document)
+    {
+        var matches = metadata
+            .Sources.Where(source =>
+                source.DocumentId == document.Facts.DocumentId
+                && source.ContentSha256 == document.ContentSha256
+            )
+            .ToArray();
+        if (matches is not [var source])
+            throw new InvalidDataException(
+                $"First step document '{document.Facts.DocumentId}' must match exactly one manifest source by document ID and SHA-256."
+            );
+
+        return new(document.Facts, document.ContentSha256, source, ReadingOrigin.Fixture);
     }
 
     private sealed record CaseManifest(

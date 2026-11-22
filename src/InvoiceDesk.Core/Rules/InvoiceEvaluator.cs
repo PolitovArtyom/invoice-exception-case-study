@@ -36,7 +36,7 @@ public sealed class InvoiceEvaluator
         string caseId,
         int step,
         RevisionInputs inputs,
-        IReadOnlyList<EarlierInvoice> earlierImports
+        IReadOnlyList<EarlierImport> earlierImports
     )
     {
         var context = BuildContext(inputs, earlierImports);
@@ -66,17 +66,6 @@ public sealed class InvoiceEvaluator
                 item.Verdict.Comparison?.Expected
             ))
             .ToArray();
-        var questions = verdicts
-            .Where(item => item.Verdict.RequiredFact is not null)
-            .Select(item => (Fact: item.Verdict.RequiredFact!.Value, item.ObjectId))
-            .GroupBy(item => item.Fact)
-            .Select(group => new InvoiceQuestion(
-                group.Key,
-                group.Select(item => item.ObjectId).Distinct(StringComparer.Ordinal).ToArray(),
-                QuestionText(group.Key)
-            ))
-            .ToArray();
-        var (subtotal, tax) = context.Totals;
 
         return new(
             "1.0",
@@ -92,16 +81,16 @@ public sealed class InvoiceEvaluator
             context.Order?.OrderId,
             context.Order is null ? null : MatchSource.Deterministic,
             context.Lines.Select(LineResult).ToArray(),
-            new InvoiceTotals(subtotal, tax, subtotal + tax),
+            context.Totals,
             checks,
             InvoiceDecision.From(checks),
-            questions
+            InvoiceQuestions.From(verdicts.Select(item => (item.ObjectId, item.Verdict)))
         );
     }
 
     private static CheckContext BuildContext(
         RevisionInputs inputs,
-        IReadOnlyList<EarlierInvoice> earlierImports
+        IReadOnlyList<EarlierImport> earlierImports
     )
     {
         var facts = inputs.Facts!;
@@ -118,7 +107,7 @@ public sealed class InvoiceEvaluator
             .Lines.Zip(InvoiceMatches.FindLines(facts, order), (invoice, match) =>
             {
                 var quantities =
-                    match is null || order is null || key is null
+                    match is null || order is null
                         ? null
                         : LineQuantities.Calculate(order, match.OrderLine, companyData, key);
                 return new MatchedLine(
@@ -130,10 +119,8 @@ public sealed class InvoiceEvaluator
                 );
             })
             .ToArray();
-        var totals = new LineAmounts(
-            lines.Sum(line => line.Amounts.Net),
-            lines.Sum(line => line.Amounts.Tax)
-        );
+        var (subtotal, tax) = LineAmounts.Sum(lines.Select(line => line.Amounts));
+        var totals = new InvoiceTotals(subtotal, tax, subtotal + tax);
 
         return new(
             facts,
@@ -162,17 +149,4 @@ public sealed class InvoiceEvaluator
             line.Quantities?.AvailableToInvoice,
             line.Quantities?.RemainingOnOrder
         );
-
-    private static string QuestionText(RequiredFact fact) =>
-        fact switch
-        {
-            RequiredFact.SupplierRegistrationId => "What is the supplier's registration ID?",
-            RequiredFact.BuyerRegistrationId => "What is the buyer's registration ID?",
-            RequiredFact.DocumentCurrency => "What currency does the invoice use?",
-            RequiredFact.OrderReference => "Which purchase order does this invoice refer to?",
-            RequiredFact.LineMatch => "Which order lines match the listed invoice lines?",
-            RequiredFact.GoodsReceipts => "Which goods or services were received for these lines?",
-            RequiredFact.BankAccount => "What bank account is printed on the invoice?",
-            _ => throw new ArgumentOutOfRangeException(nameof(fact)),
-        };
 }

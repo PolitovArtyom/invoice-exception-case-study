@@ -42,13 +42,14 @@ internal static class InvoiceApiClient
     public static ValueTask<CallToolResult> Register(
         McpClient client,
         JsonNode facts,
-        object? source
+        object? source,
+        string caseId = CaseTestEnvironment.ReviewerCaseId
     ) =>
         client.CallToolAsync(
             "register_invoice",
             new Dictionary<string, object?>
             {
-                ["case_id"] = CaseTestEnvironment.ReviewerCaseId,
+                ["case_id"] = caseId,
                 ["source"] = source,
                 ["facts"] = facts,
             }

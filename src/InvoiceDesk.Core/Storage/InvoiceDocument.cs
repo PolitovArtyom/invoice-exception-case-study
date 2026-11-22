@@ -16,5 +16,5 @@ internal sealed class InvoiceDocument
 
     public InvoiceSource? Source { get; init; }
 
-    public required string ReadingOrigin { get; init; }
+    public required ReadingOrigin ReadingOrigin { get; init; }
 }

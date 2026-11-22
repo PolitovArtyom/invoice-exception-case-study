@@ -1,6 +1,8 @@
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules.Duplicates;
+using InvoiceDesk.Core.Rules.Matching;
 using InvoiceDesk.Core.Rules.Pricing;
 using InvoiceDesk.Core.Rules.Quantities;
 
@@ -15,14 +17,14 @@ internal sealed record CheckContext(
     MatchedLine[] Lines,
     InvoiceBusinessKey? BusinessKey,
     IReadOnlyList<PreviousInvoice> PreviousInvoices,
-    IReadOnlyList<EarlierInvoice> EarlierImports,
-    LineAmounts Totals
+    IReadOnlyList<EarlierImport> EarlierImports,
+    InvoiceTotals Totals
 );
 
 internal sealed record MatchedLine(
     InvoiceLine Invoice,
     PurchaseOrderLine? OrderLine,
-    string? MatchReason,
+    LineMatchReason? MatchReason,
     LineAmounts Amounts,
     LineQuantities? Quantities
 );
