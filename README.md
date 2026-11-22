@@ -5,7 +5,7 @@ Invoice Desk checks an invoice against a saved company-data snapshot and shows t
 | Scope | Stage 00 |
 | --- | --- |
 | Built | Case 001 from PDF source references through MCP fact registration, all 27 passing checks, SQLite history, case list and detail, and native runner replay. |
-| Described | [Remaining stages](docs/plan.md), [architecture](docs/architecture.md), and the [assignment](docs/ASSIGNMENT.md). |
+| Described | [Remaining stages](docs/plan.md), [architecture](docs/architecture.md), and the [assignment](#invoice-exception-agent). |
 | Prototype | [Simulated product vision](submission/prototype/), including the unbuilt case 103. |
 
 ## Run the workspace

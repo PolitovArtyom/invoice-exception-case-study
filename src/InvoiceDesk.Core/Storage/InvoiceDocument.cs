@@ -8,9 +8,7 @@ internal sealed class InvoiceDocument
 
     public required string CaseId { get; init; }
 
-    public required string ExternalDocumentId { get; init; }
-
-    public required int ImportOrder { get; init; }
+    public required int ImportRevision { get; init; }
 
     public required string ContentSha256 { get; init; }
 

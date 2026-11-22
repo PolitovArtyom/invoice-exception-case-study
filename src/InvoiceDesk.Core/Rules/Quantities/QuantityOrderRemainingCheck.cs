@@ -5,12 +5,14 @@ namespace InvoiceDesk.Core.Rules.Quantities;
 
 internal static class QuantityOrderRemainingCheck
 {
-    public static InvoiceCheck Evaluate(InvoiceFacts facts, InvoiceLine line, int index, LineQuantities quantities)
-    {
-        Check.Require(InvoiceDecimal.Parse(line.Quantity) <= quantities.RemainingOnOrder,
-            $"QTY_ORDER_REMAINING above the outstanding order quantity for {line.LineId}");
+    private const string Code = "QTY_ORDER_REMAINING";
 
-        return Check.Pass("QTY_ORDER_REMAINING", line.LineId, facts,
+    public static CheckOutcome Evaluate(InvoiceFacts facts, InvoiceLine line, int index, LineQuantities quantities)
+    {
+        CheckOutcome.Require(InvoiceDecimal.Parse(line.Quantity) <= quantities.RemainingOnOrder,
+            $"{Code} above the outstanding order quantity for {line.LineId}");
+
+        return CheckOutcome.Pass(Code, line.LineId, facts,
             new Dictionary<string, CheckOperand>
             {
                 ["quantity"] = CheckOperand.Invoice(line.Quantity),

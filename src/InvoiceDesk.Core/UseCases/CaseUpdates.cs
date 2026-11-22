@@ -9,14 +9,14 @@ namespace InvoiceDesk.Core.UseCases;
 
 public sealed class CaseUpdates(CaseRepository repository, InvoiceEvaluator evaluator, TimeProvider clock)
 {
-    public bool LoadCase(CaseMetadata metadata, CompanySnapshot company, InvoiceReading? fixture)
+    public bool LoadCase(CaseMetadata metadata, CompanyData companyData, InvoiceReading? fixture)
     {
         using var transaction = repository.BeginUpdate();
         if (repository.FindForUpdate(metadata.CaseId) is not null)
             return false;
 
-        var invoiceCase = repository.Add(metadata);
-        Apply(invoiceCase, null, company, fixture, null, "load_case", "trusted_loader");
+        var invoiceCase = InvoiceCase.FromMetadata(metadata);
+        Apply(invoiceCase, null, companyData, fixture, null, "load_case", "trusted_loader");
         transaction.Commit();
         return true;
     }
@@ -26,27 +26,24 @@ public sealed class CaseUpdates(CaseRepository repository, InvoiceEvaluator eval
         using var transaction = repository.BeginUpdate();
         var invoiceCase = repository.FindForUpdate(caseId) ??
             throw new InvoiceValidationException("/case_id", "Case does not exist.");
-        var current = repository.ReadRevision(caseId, invoiceCase.CurrentRevision);
+        var current = repository.FindCurrentRevisionForUpdate(invoiceCase);
         var revision = Apply(invoiceCase, current, null, reading, null, "register_invoice", "agent");
         transaction.Commit();
         return Response(revision.Number, revision.Result!, false);
     }
 
-    public InvoiceResult SubmitCaseInputs(CaseMetadata metadata, int step, CompanySnapshot? company, InvoiceReading? reading)
+    public InvoiceResult SubmitCaseInputs(CaseMetadata metadata, int step, CompanyData? companyData, InvoiceReading? reading)
     {
         using var transaction = repository.BeginUpdate();
         var invoiceCase = repository.FindForUpdate(metadata.CaseId);
-        if (invoiceCase is not null && invoiceCase.AsOf != metadata.AsOf)
-            throw new InvoiceValidationException("/as_of", "Must match the saved case date.");
-
-        var current = invoiceCase is null ? null : repository.ReadRevision(metadata.CaseId, invoiceCase.CurrentRevision);
-        if (company is null && current is null)
+        var current = invoiceCase is null ? null : repository.FindCurrentRevisionForUpdate(invoiceCase);
+        if (companyData is null && current is null)
             throw new InvoiceValidationException("/context", "Company data is required before the first invoice.");
         if (reading is null && current?.Document is null)
             throw new InvoiceValidationException("/document", "An invoice is required for the first result.");
 
-        invoiceCase ??= repository.Add(metadata);
-        var revision = Apply(invoiceCase, current, company, reading, step, "submit_case_inputs", "runner");
+        invoiceCase ??= InvoiceCase.FromMetadata(metadata);
+        var revision = Apply(invoiceCase, current, companyData, reading, step, "submit_case_inputs", "runner");
         transaction.Commit();
         return revision.Result!;
     }
@@ -62,21 +59,35 @@ public sealed class CaseUpdates(CaseRepository repository, InvoiceEvaluator eval
         return Response(latest.Number, latest.Result, true);
     }
 
-    private CaseRevision Apply(InvoiceCase invoiceCase, CaseRevision? current, CompanySnapshot? company,
+    private CaseRevision Apply(InvoiceCase invoiceCase, CaseRevision? current, CompanyData? companyData,
         InvoiceReading? reading, int? step, string kind, string actor)
     {
-        int number = invoiceCase.CurrentRevision + 1;
-        var facts = reading?.Facts ?? current?.Document?.Facts;
-        InvoiceResult? result = null;
-        if (facts is not null)
-        {
-            long? exceptDocument = reading is null ? current?.DocumentId : null;
-            result = evaluator.Evaluate(new(invoiceCase.Id, step ?? number, number, facts,
-                company ?? current!.Snapshot.Data, repository.ReadEarlierImports(invoiceCase.Id, exceptDocument)));
-        }
+        var inputs = ResolveInputs(invoiceCase, current, companyData, reading);
+        var result = inputs.Facts is null ? null : evaluator.Evaluate(invoiceCase.Id, step ?? inputs.Number, inputs,
+            repository.ReadEarlierImports(invoiceCase.Id, inputs.Document?.Id));
 
-        return repository.Append(invoiceCase, company, current?.Snapshot, reading, current?.Document, result,
-            new(kind, actor, clock.GetUtcNow()));
+        return repository.Append(invoiceCase, inputs, result, new(kind, actor, clock.GetUtcNow()));
+    }
+
+    private static RevisionInputs ResolveInputs(InvoiceCase invoiceCase, CaseRevision? current, CompanyData? companyData, InvoiceReading? reading)
+    {
+        int number = invoiceCase.CurrentRevision + 1;
+        var snapshot = companyData is null ? current!.Snapshot : new CompanyDataSnapshot
+        {
+            CaseId = invoiceCase.Id,
+            ContextVersion = companyData.ContextVersion,
+            Data = companyData
+        };
+        var document = reading is null ? current?.Document : new InvoiceDocument
+        {
+            CaseId = invoiceCase.Id,
+            ImportRevision = number,
+            ContentSha256 = reading.ContentSha256,
+            Source = reading.Source,
+            Facts = reading.Facts,
+            ReadingOrigin = reading.ReadingOrigin
+        };
+        return new(number, snapshot, document);
     }
 
     private static AssessmentResponse Response(int revision, InvoiceResult result, bool unchanged) =>

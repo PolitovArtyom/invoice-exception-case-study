@@ -21,14 +21,7 @@ public static class IntakeValidation
     {
         AssignmentSchemas.Instance.Validate("extraction", json, prefix);
         ValidateValues(json, prefix);
-        var evidenceEntries = json!["evidence"]!.AsArray();
-        for (int index = 0; index < evidenceEntries.Count; index++)
-        {
-            if (!evidenceEntries[index]!["page"]!.AsValue().TryGetValue<int>(out _))
-                throw new InvoiceValidationException($"{prefix}/evidence/{index}/page", "Page number is outside the supported integer range.");
-        }
-
-        var facts = InvoiceJson.Read<InvoiceFacts>(json.ToJsonString());
+        var facts = InvoiceJson.Read<InvoiceFacts>(json!.ToJsonString());
         RequireUnique(facts.Lines.Select(line => line.LineId), prefix + "/lines", "invoice line ID");
 
         var missingPaths = new HashSet<string>(StringComparer.Ordinal);
@@ -59,16 +52,13 @@ public static class IntakeValidation
         return facts;
     }
 
-    public static CompanySnapshot ReadCompanyData(JsonNode? json, string prefix)
+    public static CompanyData ReadCompanyData(JsonNode? json, string prefix)
     {
         AssignmentSchemas.Instance.Validate("context", json, prefix);
         ValidateValues(json, prefix);
-        var snapshot = InvoiceJson.Read<CompanySnapshot>(json!.ToJsonString());
-        RequireUnique(snapshot.PurchaseOrders.Orders.Select(order => order.OrderId), prefix + "/purchase_orders/orders", "order ID");
+        var snapshot = InvoiceJson.Read<CompanyData>(json!.ToJsonString());
         RequireUnique(snapshot.PurchaseOrders.Orders.SelectMany(order => order.Lines).Select(line => line.LineId),
             prefix + "/purchase_orders/orders", "order line ID");
-        RequireUnique(snapshot.Suppliers.Suppliers.Select(supplier => supplier.SupplierId), prefix + "/suppliers/suppliers", "supplier ID");
-        RequireUnique(snapshot.Buyers.Buyers.Select(buyer => buyer.BuyerId), prefix + "/buyers/buyers", "buyer ID");
         return snapshot;
     }
 
@@ -102,16 +92,9 @@ public static class IntakeValidation
 
     private static void ValidateDecimal(string text, string path)
     {
-        var parts = text.Split('.');
-        string whole = parts[0].TrimStart('0');
-        string fraction = parts.Length == 2 ? parts[1].TrimEnd('0') : "";
-        string canonical = (whole.Length == 0 ? "0" : whole) + (fraction.Length == 0 ? "" : "." + fraction);
         if (!decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out decimal value) ||
             value > MaximumSupportedMagnitude)
-            throw new UnsupportedInvoiceCaseException($"amount or quantity above {MaximumSupportedMagnitude.ToString(CultureInfo.InvariantCulture)} at {path}");
-
-        if (value.ToString("0.############################", CultureInfo.InvariantCulture) != canonical)
-            throw new InvoiceValidationException(path, "Decimal value is outside the supported exact representation.");
+            throw UnsupportedInvoiceCaseException.AmountAboveLimit(MaximumSupportedMagnitude, path);
     }
 
     private static IEnumerable<string> NullFields(JsonNode? node, string path) => node switch

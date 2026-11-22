@@ -7,14 +7,16 @@ namespace InvoiceDesk.Core.Rules.Bank;
 
 internal static class BankAccountCheck
 {
-    public static InvoiceCheck Evaluate(InvoiceFacts facts, Supplier supplier)
+    private const string Code = "BANK_ACCOUNT";
+
+    public static CheckOutcome Evaluate(InvoiceFacts facts, Supplier supplier)
     {
         var approved = supplier.ApprovedBankAccounts.Select(account => account.Iban).ToArray();
-        Check.Require(facts.Bank.Iban is not null &&
+        CheckOutcome.Require(facts.Bank.Iban is not null &&
             approved.Any(iban => InvoiceText.Iban(iban) == InvoiceText.Iban(facts.Bank.Iban)),
-            "BANK_ACCOUNT for an absent or unapproved account");
+            $"{Code} for an absent or unapproved account");
 
-        return Check.Pass("BANK_ACCOUNT", facts.DocumentId, facts,
+        return CheckOutcome.Pass(Code, facts.DocumentId, facts,
             new Dictionary<string, CheckOperand> { ["iban"] = CheckOperand.Invoice(facts.Bank.Iban) },
             new Dictionary<string, CheckOperand> { ["approved_accounts"] = CheckOperand.Company(approved) },
             "/bank/iban");

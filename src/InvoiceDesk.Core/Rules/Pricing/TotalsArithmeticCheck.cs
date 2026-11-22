@@ -5,17 +5,19 @@ namespace InvoiceDesk.Core.Rules.Pricing;
 
 internal static class TotalsArithmeticCheck
 {
-    public static (InvoiceTotals Totals, InvoiceCheck Verdict) Evaluate(InvoiceFacts facts, IReadOnlyList<LineAmounts> amounts)
+    private const string Code = "TOTALS_ARITHMETIC";
+
+    public static (InvoiceTotals Totals, CheckOutcome Outcome) Evaluate(InvoiceFacts facts, IReadOnlyList<LineAmounts> amounts)
     {
         decimal subtotal = amounts.Sum(line => line.Net);
         decimal tax = amounts.Sum(line => line.Tax);
         decimal total = subtotal + tax;
-        Check.Require(subtotal == InvoiceDecimal.Parse(facts.DeclaredSubtotal) &&
+        CheckOutcome.Require(subtotal == InvoiceDecimal.Parse(facts.DeclaredSubtotal) &&
             tax == InvoiceDecimal.Parse(facts.DeclaredTaxTotal) && total == InvoiceDecimal.Parse(facts.DeclaredTotal),
-            "TOTALS_ARITHMETIC with inconsistent declared totals");
+            $"{Code} with inconsistent declared totals");
 
         var totals = new InvoiceTotals(InvoiceDecimal.Money(subtotal), InvoiceDecimal.Money(tax), InvoiceDecimal.Money(total));
-        return (totals, Check.Pass("TOTALS_ARITHMETIC", facts.DocumentId, facts,
+        return (totals, CheckOutcome.Pass(Code, facts.DocumentId, facts,
             new Dictionary<string, CheckOperand>
             {
                 ["declared_subtotal"] = CheckOperand.Invoice(facts.DeclaredSubtotal),

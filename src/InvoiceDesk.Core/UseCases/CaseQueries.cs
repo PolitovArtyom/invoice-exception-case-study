@@ -1,4 +1,5 @@
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Storage;
 
 namespace InvoiceDesk.Core.UseCases;
@@ -14,7 +15,7 @@ public sealed class CaseQueries(CaseRepository repository)
             return null;
 
         var revision = repository.ReadRevision(caseId, invoiceCase.CurrentRevision)!;
-        return new(invoiceCase.Metadata, invoiceCase.CurrentRevision, View(revision));
+        return new(invoiceCase.Metadata, invoiceCase.CurrentRevision, Stage(revision), View(revision));
     }
 
     public CaseView? ReadAssessment(string caseId, string assessmentId)
@@ -24,13 +25,13 @@ public sealed class CaseQueries(CaseRepository repository)
             return null;
 
         var revision = repository.ReadRevision(caseId, number);
-        return revision?.Result is null ? null : new(invoiceCase.Metadata, invoiceCase.CurrentRevision, View(revision));
+        return revision?.Result is null ? null : new(invoiceCase.Metadata, invoiceCase.CurrentRevision, Stage(revision), View(revision));
     }
 
     public RevisionView[]? ReadHistory(string caseId) =>
         repository.Find(caseId) is null ? null : repository.ReadHistory(caseId).Select(View).ToArray();
 
-    public CompanySnapshot? ReadCompanyData(string caseId)
+    public CompanyData? ReadCompanyData(string caseId)
     {
         var invoiceCase = repository.Find(caseId);
         return invoiceCase is null ? null : repository.ReadRevision(caseId, invoiceCase.CurrentRevision)?.Snapshot.Data;
@@ -52,8 +53,15 @@ public sealed class CaseQueries(CaseRepository repository)
     {
         var facts = revision.Document?.Facts;
         string? decision = revision.Result?.Decision;
-        string stage = decision == "clear" ? "Ready for accounting" : "Needs attention";
-        return new(invoiceCase.Id, invoiceCase.Origin, facts?.Number, facts?.Supplier.LegalName, facts?.Buyer.LegalName,
-            facts?.DeclaredTotal, facts?.Currency, decision, stage, revision.Document?.ReadingOrigin);
+        return new(invoiceCase.Id, invoiceCase.Origin, facts?.Number, facts?.Supplier.LegalName,
+            facts?.DeclaredTotal, facts?.Currency, decision, Stage(revision), revision.Document?.ReadingOrigin);
+    }
+
+    private static string Stage(CaseRevision revision)
+    {
+        if (revision.Document is null)
+            return "not_read";
+
+        return revision.Result?.Decision == InvoiceDecision.Clear ? "ready_for_accounting" : "needs_attention";
     }
 }

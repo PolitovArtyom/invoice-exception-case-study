@@ -10,5 +10,5 @@ internal sealed class CompanyDataSnapshot
 
     public required string ContextVersion { get; init; }
 
-    public required CompanySnapshot Data { get; init; }
+    public required CompanyData Data { get; init; }
 }

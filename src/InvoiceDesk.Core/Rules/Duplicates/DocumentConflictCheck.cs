@@ -8,15 +8,17 @@ namespace InvoiceDesk.Core.Rules.Duplicates;
 
 internal static class DocumentConflictCheck
 {
-    public static InvoiceCheck Evaluate(InvoiceFacts facts, CompanySnapshot company, InvoiceBusinessKey key,
+    private const string Code = "DOCUMENT_CONFLICT";
+
+    public static (string ImportDisposition, CheckOutcome Outcome) Evaluate(InvoiceFacts facts, CompanyData companyData, InvoiceBusinessKey key,
         IReadOnlyList<EarlierInvoice> earlierImports)
     {
-        var historyMatches = company.InvoiceHistory.Documents.Where(key.Matches).Select(invoice => invoice.DocumentId).ToArray();
+        var historyMatches = companyData.InvoiceHistory.Documents.Where(key.Matches).Select(invoice => invoice.DocumentId).ToArray();
         var earlierMatches = earlierImports.Where(invoice => Matches(invoice, key)).Select(invoice => invoice.Facts.DocumentId).ToArray();
-        Check.Require(historyMatches.Length == 0 && earlierMatches.Length == 0,
-            "DOCUMENT_CONFLICT for a previously imported or counted invoice with the same business key");
+        CheckOutcome.Require(historyMatches.Length == 0 && earlierMatches.Length == 0,
+            $"{Code} for a previously imported or counted invoice with the same business key");
 
-        return Check.Pass("DOCUMENT_CONFLICT", facts.DocumentId, facts,
+        return ("new", CheckOutcome.Pass(Code, facts.DocumentId, facts,
             new Dictionary<string, CheckOperand>
             {
                 ["invoice_number"] = CheckOperand.Invoice(facts.Number),
@@ -25,7 +27,7 @@ internal static class DocumentConflictCheck
                 ["earlier_import_matches"] = CheckOperand.Calculated(earlierMatches)
             },
             new Dictionary<string, CheckOperand> { ["prior_matches"] = CheckOperand.Policy("none") },
-            "/number", "/supplier/registration_id", "/buyer/registration_id", "/buyer/legal_name");
+            "/number", "/supplier/registration_id", "/buyer/registration_id", "/buyer/legal_name"));
     }
 
     private static bool Matches(EarlierInvoice invoice, InvoiceBusinessKey key) =>

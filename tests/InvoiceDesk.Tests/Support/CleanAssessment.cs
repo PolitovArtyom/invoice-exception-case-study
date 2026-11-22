@@ -6,10 +6,10 @@ namespace InvoiceDesk.Tests.Support;
 
 internal static class CleanAssessment
 {
-    public static void AssertResult(JsonNode result, int revision)
+    public static void AssertResult(JsonNode result, int revision, string caseId = PublicCases.CleanCase)
     {
         AssignmentSchemas.Instance.Validate("step-output", result);
-        Assert.Equal("case-001", Text(result, "case_id"));
+        Assert.Equal(caseId, Text(result, "case_id"));
         Assert.Equal("core-v1", Text(result, "policy_version"));
         Assert.Equal("CTX-001-v1", Text(result, "context_version"));
         Assert.Equal(revision, result["input_revision"]!.GetValue<int>());
@@ -69,6 +69,20 @@ internal static class CleanAssessment
         Assert.Equal("0.01", Text(price["expected"]!["inclusive_tolerance"]!, "value"));
         Assert.Equal("order", Text(price["expected"]!["unit_net_price"]!, "source"));
         Assert.Equal("/evidence/17", Assert.Single(price["evidence_refs"]!.AsArray())!.GetValue<string>());
+
+        AssertSources("ORDER_MATCH", "DOC-001", "order", checks, "order_id", "reference");
+        AssertSources("LINE_MATCH", "L01", "order", checks, "order_line_id", "sku", "description", "explicit_aliases", "unit");
+        AssertSources("CURRENCY_MATCH", "DOC-001", "order", checks, "currency");
+        AssertSources("SUPPLIER_IDENTITY", "DOC-001", "order", checks, "supplier_id");
+        AssertSources("BUYER_IDENTITY", "DOC-001", "order", checks, "buyer_id");
+        AssertSources("SUPPLIER_IDENTITY", "DOC-001", "company_data", checks, "registration_id");
+        AssertSources("BUYER_IDENTITY", "DOC-001", "company_data", checks, "legal_name", "registration_id", "explicit_aliases");
+    }
+
+    private static void AssertSources(string code, string objectId, string source, JsonArray checks, params string[] operands)
+    {
+        var check = checks.Single(item => Text(item!, "code") == code && Text(item!, "object_id") == objectId)!;
+        Assert.All(operands, operand => Assert.Equal(source, Text(check["expected"]![operand]!, "source")));
     }
 
     private static void AssertLine(JsonNode line, string documentLine, string orderLine, string quantity, string net, string tax)

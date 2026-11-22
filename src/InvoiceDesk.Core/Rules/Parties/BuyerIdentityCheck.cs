@@ -7,19 +7,21 @@ namespace InvoiceDesk.Core.Rules.Parties;
 
 internal static class BuyerIdentityCheck
 {
-    public static Buyer? Resolve(InvoiceFacts facts, CompanySnapshot company)
+    private const string Code = "BUYER_IDENTITY";
+
+    public static Buyer? Resolve(InvoiceFacts facts, CompanyData companyData)
     {
-        var matches = company.Buyers.Buyers.Where(buyer => Matches(facts.Buyer, buyer)).Take(2).ToArray();
+        var matches = companyData.Buyers.Buyers.Where(buyer => Matches(facts.Buyer, buyer)).Take(2).ToArray();
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    public static InvoiceCheck Evaluate(InvoiceFacts facts, Buyer? buyer, PurchaseOrder order)
+    public static CheckOutcome Evaluate(InvoiceFacts facts, Buyer? buyer, PurchaseOrder order)
     {
         if (buyer is null || buyer.BuyerId != order.BuyerId)
-            throw new UnsupportedInvoiceCaseException("BUYER_IDENTITY for a missing, ambiguous or different buyer");
+            throw new UnsupportedInvoiceCaseException($"{Code} for a missing, ambiguous or different buyer");
 
         bool byRegistration = facts.Buyer.RegistrationId is not null;
-        return Check.Pass("BUYER_IDENTITY", facts.DocumentId, facts,
+        return CheckOutcome.Pass(Code, facts.DocumentId, facts,
             new Dictionary<string, CheckOperand>
             {
                 ["registration_id"] = CheckOperand.Invoice(facts.Buyer.RegistrationId),
@@ -28,7 +30,7 @@ internal static class BuyerIdentityCheck
             },
             new Dictionary<string, CheckOperand>
             {
-                ["buyer_id"] = CheckOperand.Company(order.BuyerId),
+                ["buyer_id"] = CheckOperand.Order(order.BuyerId),
                 ["registration_id"] = CheckOperand.Company(buyer.RegistrationId),
                 ["legal_name"] = CheckOperand.Company(buyer.LegalName),
                 ["explicit_aliases"] = CheckOperand.Company(buyer.ExplicitAliases)

@@ -1,13 +1,14 @@
+import type { CaseStage } from './caseStage'
+
 export interface CaseSummary {
   case_id: string
   origin: string
   number: string | null
   supplier: string | null
-  buyer: string | null
   declared_total: string | null
   currency: string | null
   decision: string | null
-  stage: string
+  stage: CaseStage
   reading_origin: string | null
 }
 
@@ -51,6 +52,7 @@ export interface CheckOperand {
 export interface CaseView {
   case: { case_id: string; origin: string }
   current_revision: number
+  stage: CaseStage
   revision: {
     number: number
     context_version: string

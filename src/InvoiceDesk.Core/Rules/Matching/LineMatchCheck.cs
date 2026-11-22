@@ -7,25 +7,27 @@ namespace InvoiceDesk.Core.Rules.Matching;
 
 internal static class LineMatchCheck
 {
-    public static (PurchaseOrderLine OrderLine, InvoiceCheck Check)[] Evaluate(InvoiceFacts facts, PurchaseOrder order)
+    private const string Code = "LINE_MATCH";
+
+    public static (PurchaseOrderLine OrderLine, string MatchSource, CheckOutcome Outcome)[] Evaluate(InvoiceFacts facts, PurchaseOrder order)
     {
         var matches = facts.Lines.Select((line, index) => Match(facts, line, index, order)).ToArray();
-        Check.Require(matches.Select(match => match.OrderLine.LineId).Distinct().Count() == matches.Length,
-            "LINE_MATCH when multiple invoice lines claim one order line");
+        CheckOutcome.Require(matches.Select(match => match.OrderLine.LineId).Distinct().Count() == matches.Length,
+            $"{Code} when multiple invoice lines claim one order line");
         return matches;
     }
 
-    private static (PurchaseOrderLine OrderLine, InvoiceCheck Check) Match(
+    private static (PurchaseOrderLine OrderLine, string MatchSource, CheckOutcome Outcome) Match(
         InvoiceFacts facts, InvoiceLine line, int index, PurchaseOrder order)
     {
         var matches = order.Lines.Select(candidate => (OrderLine: candidate, Reason: MatchReason(line, candidate)))
             .Where(match => match.Reason is not null).Take(2).ToArray();
         if (matches.Length != 1)
-            throw new UnsupportedInvoiceCaseException($"LINE_MATCH without a unique exact match for {line.LineId}");
+            throw new UnsupportedInvoiceCaseException($"{Code} without a unique exact match for {line.LineId}");
 
         var (orderLine, reason) = matches[0];
-        Check.Require(line.Unit == orderLine.Unit, $"LINE_MATCH with different units for {line.LineId}");
-        return (orderLine, Check.Pass("LINE_MATCH", line.LineId, facts,
+        CheckOutcome.Require(line.Unit == orderLine.Unit, $"{Code} with different units for {line.LineId}");
+        return (orderLine, "deterministic", CheckOutcome.Pass(Code, line.LineId, facts,
             new Dictionary<string, CheckOperand>
             {
                 ["sku"] = CheckOperand.Invoice(line.Sku),
@@ -35,11 +37,11 @@ internal static class LineMatchCheck
             },
             new Dictionary<string, CheckOperand>
             {
-                ["order_line_id"] = CheckOperand.Company(orderLine.LineId),
-                ["sku"] = CheckOperand.Company(orderLine.Sku),
-                ["description"] = CheckOperand.Company(orderLine.Description),
-                ["explicit_aliases"] = CheckOperand.Company(orderLine.ExplicitAliases),
-                ["unit"] = CheckOperand.Company(orderLine.Unit)
+                ["order_line_id"] = CheckOperand.Order(orderLine.LineId),
+                ["sku"] = CheckOperand.Order(orderLine.Sku),
+                ["description"] = CheckOperand.Order(orderLine.Description),
+                ["explicit_aliases"] = CheckOperand.Order(orderLine.ExplicitAliases),
+                ["unit"] = CheckOperand.Order(orderLine.Unit)
             }, $"/lines/{index}/sku", $"/lines/{index}/description", $"/lines/{index}/unit"));
     }
 

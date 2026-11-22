@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace InvoiceDesk.Core.Storage.Migrations
 {
     [DbContext(typeof(InvoiceDatabase))]
-    [Migration("20261122160038_InitialInvoiceStorage")]
+    [Migration("20261122170604_InitialInvoiceStorage")]
     partial class InitialInvoiceStorage
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -89,10 +89,6 @@ namespace InvoiceDesk.Core.Storage.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("PolicyVersion")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Sources")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -116,15 +112,11 @@ namespace InvoiceDesk.Core.Storage.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ExternalDocumentId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Facts")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("ImportOrder")
+                    b.Property<int>("ImportRevision")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ReadingOrigin")
@@ -136,7 +128,7 @@ namespace InvoiceDesk.Core.Storage.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CaseId", "ImportOrder")
+                    b.HasIndex("CaseId", "ImportRevision")
                         .IsUnique();
 
                     b.ToTable("Documents", (string)null);

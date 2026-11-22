@@ -10,13 +10,19 @@ internal sealed class InvoiceCase
 
     public required string AsOf { get; init; }
 
-    public string PolicyVersion { get; init; } = CaseMetadata.PolicyVersion;
-
     public required CaseSources Sources { get; init; }
 
     public int CurrentRevision { get; set; }
 
     public CaseMetadata Metadata => new(Id, Origin, AsOf, Sources.Items);
+
+    public static InvoiceCase FromMetadata(CaseMetadata metadata) => new()
+    {
+        Id = metadata.CaseId,
+        Origin = metadata.Origin,
+        AsOf = metadata.AsOf,
+        Sources = new(metadata.Sources)
+    };
 }
 
 internal sealed record CaseSources(IReadOnlyList<InvoiceSource> Items);

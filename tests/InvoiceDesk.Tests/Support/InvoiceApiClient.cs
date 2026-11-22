@@ -20,16 +20,16 @@ internal static class InvoiceApiClient
         return await McpClient.CreateAsync(transport);
     }
 
-    public static ValueTask<CallToolResult> Call(McpClient client, string tool, string caseId = PublicCases.CleanCase) =>
+    public static ValueTask<CallToolResult> Call(McpClient client, string tool, string caseId = CaseTestEnvironment.ReviewerCaseId) =>
         client.CallToolAsync(tool, new Dictionary<string, object?> { ["case_id"] = caseId });
 
     public static ValueTask<CallToolResult> Register(McpClient client, JsonNode facts) =>
-        Register(client, facts, new { root = "public", relative_path = "cases/case-001/documents/document-001.pdf" });
+        Register(client, facts, new { root = "own", relative_path = $"cases/{CaseTestEnvironment.ReviewerCaseId}/documents/document-001.pdf" });
 
     public static ValueTask<CallToolResult> Register(McpClient client, JsonNode facts, object? source) =>
         client.CallToolAsync("register_invoice", new Dictionary<string, object?>
         {
-            ["case_id"] = PublicCases.CleanCase,
+            ["case_id"] = CaseTestEnvironment.ReviewerCaseId,
             ["source"] = source,
             ["facts"] = facts
         });

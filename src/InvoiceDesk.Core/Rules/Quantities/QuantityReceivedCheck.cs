@@ -5,13 +5,15 @@ namespace InvoiceDesk.Core.Rules.Quantities;
 
 internal static class QuantityReceivedCheck
 {
-    public static InvoiceCheck Evaluate(InvoiceFacts facts, InvoiceLine line, int index, LineQuantities quantities)
+    private const string Code = "QTY_RECEIVED";
+
+    public static CheckOutcome Evaluate(InvoiceFacts facts, InvoiceLine line, int index, LineQuantities quantities)
     {
         if (quantities.Received is not decimal received || quantities.AvailableToInvoice is not decimal available)
-            throw new UnsupportedInvoiceCaseException($"QTY_RECEIVED without receipt data for {line.LineId}");
-        Check.Require(InvoiceDecimal.Parse(line.Quantity) <= available, $"QTY_RECEIVED above availability for {line.LineId}");
+            throw new UnsupportedInvoiceCaseException($"{Code} without receipt data for {line.LineId}");
+        CheckOutcome.Require(InvoiceDecimal.Parse(line.Quantity) <= available, $"{Code} above availability for {line.LineId}");
 
-        return Check.Pass("QTY_RECEIVED", line.LineId, facts,
+        return CheckOutcome.Pass(Code, line.LineId, facts,
             new Dictionary<string, CheckOperand>
             {
                 ["quantity"] = CheckOperand.Invoice(line.Quantity),

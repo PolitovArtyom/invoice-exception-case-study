@@ -1,4 +1,5 @@
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Model.CompanyData;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -31,11 +32,11 @@ public sealed class InvoiceDatabase(DbContextOptions<InvoiceDatabase> options) :
         documents.Property(row => row.Facts).HasConversion<InvoiceJsonConversion<InvoiceFacts>>();
         documents.Property(row => row.Source).HasConversion(new InvoiceJsonConversion<InvoiceSource?>());
         documents.HasOne<InvoiceCase>().WithMany().HasForeignKey(row => row.CaseId).OnDelete(DeleteBehavior.Restrict);
-        documents.HasIndex(row => new { row.CaseId, row.ImportOrder }).IsUnique();
+        documents.HasIndex(row => new { row.CaseId, row.ImportRevision }).IsUnique();
 
         var snapshots = builder.Entity<CompanyDataSnapshot>();
         snapshots.ToTable("CompanyDataSnapshots");
-        snapshots.Property(row => row.Data).HasConversion<InvoiceJsonConversion<Model.CompanyData.CompanySnapshot>>();
+        snapshots.Property(row => row.Data).HasConversion<InvoiceJsonConversion<CompanyData>>();
         snapshots.HasOne<InvoiceCase>().WithMany().HasForeignKey(row => row.CaseId).OnDelete(DeleteBehavior.Restrict);
 
         var revisions = builder.Entity<CaseRevision>();

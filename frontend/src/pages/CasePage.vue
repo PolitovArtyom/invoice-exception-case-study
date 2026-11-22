@@ -6,7 +6,8 @@ import ChecksTable from '../components/ChecksTable.vue'
 import DecisionTag from '../components/DecisionTag.vue'
 import InvoiceTotals from '../components/InvoiceTotals.vue'
 import SourceTag from '../components/SourceTag.vue'
-import { formatMoney } from '../money'
+import { caseStageLabel } from '../caseStage'
+import { formatDecimal } from '../formatDecimal'
 
 const props = defineProps<{ caseId: string }>()
 const view = ref<CaseView | null>(null)
@@ -73,13 +74,14 @@ onMounted(async () => {
       <div class="invoice-decision">
         <p v-if="facts" class="declared">
           <span class="number"
-            >{{ formatMoney(facts.declared_total) }} {{ facts.currency }}</span
+            >{{ formatDecimal(facts.declared_total) }}
+            {{ facts.currency }}</span
           >
           <SourceTag source="invoice" />
         </p>
         <DecisionTag :decision="result?.decision ?? null" />
-        <p v-if="result?.decision === 'clear'" class="stage">
-          Ready for accounting
+        <p v-if="view.stage === 'ready_for_accounting'" class="stage">
+          {{ caseStageLabel(view.stage) }}
         </p>
       </div>
       <div class="invoice-meta">

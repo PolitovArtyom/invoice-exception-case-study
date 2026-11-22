@@ -10,16 +10,16 @@ internal sealed record LineQuantities(decimal Ordered, decimal? Received, decima
     public decimal RemainingOnOrder => Ordered - PreviouslyInvoiced;
 
     public static LineQuantities Calculate(PurchaseOrder order, PurchaseOrderLine line,
-        CompanySnapshot company, InvoiceBusinessKey key)
+        CompanyData companyData, InvoiceBusinessKey key)
     {
-        decimal previous = company.InvoiceHistory.Documents
+        decimal previous = companyData.InvoiceHistory.Documents
             .Where(invoice => invoice.Status == "counted" && invoice.MatchedOrderId == order.OrderId && !key.Matches(invoice))
             .SelectMany(invoice => invoice.Lines)
             .Where(invoiceLine => invoiceLine.OrderLineId == line.LineId)
             .Sum(invoiceLine => InvoiceDecimal.Parse(invoiceLine.Quantity));
 
-        decimal? received = company.GoodsReceipts.Availability == "available"
-            ? company.GoodsReceipts.Receipts
+        decimal? received = companyData.GoodsReceipts.Availability == "available"
+            ? companyData.GoodsReceipts.Receipts
                 .Where(receipt => receipt.OrderLineId == line.LineId && receipt.Status == "accepted")
                 .Sum(receipt => InvoiceDecimal.Parse(receipt.AcceptedQuantity))
             : null;

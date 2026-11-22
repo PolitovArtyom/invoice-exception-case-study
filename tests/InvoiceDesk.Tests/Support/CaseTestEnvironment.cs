@@ -1,17 +1,18 @@
 using System.Text.Json.Nodes;
 
-using InvoiceDesk.Web.CaseLoading;
-
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace InvoiceDesk.Tests.Support;
 
 internal sealed class CaseTestEnvironment : IDisposable
 {
+    public const string ReviewerCaseId = "case-911";
+
     private readonly TemporaryDirectory _directory = new();
+
+    public CaseTestEnvironment() => Directory.CreateDirectory(Path.Combine(DatasetPath, "cases"));
 
     public string DatasetPath => Path.Combine(_directory.Path, "dataset");
 
@@ -19,59 +20,48 @@ internal sealed class CaseTestEnvironment : IDisposable
 
     public string DatabasePath => Path.Combine(_directory.Path, "invoice.sqlite");
 
-    public string CopyCase(string caseId)
-    {
-        string original = PublicCases.Folder(caseId);
-        string copied = Path.Combine(DatasetPath, "cases", caseId);
-        foreach (string subdirectory in new[] { "steps", "documents" })
-        {
-            Directory.CreateDirectory(Path.Combine(copied, subdirectory));
-            foreach (string path in Directory.EnumerateFiles(Path.Combine(original, subdirectory)))
-                File.Copy(path, Path.Combine(copied, subdirectory, Path.GetFileName(path)));
-        }
+    public string CopyCase(string caseId) =>
+        CopyCaseFolder(caseId, Path.Combine(DatasetPath, "cases", caseId));
 
-        File.Copy(Path.Combine(original, "case.json"), Path.Combine(copied, "case.json"));
-        return copied;
-    }
-
-    public void AddReviewerCase()
+    public string AddReviewerCase()
     {
-        const string reviewerCaseId = "case-911";
-        string folder = Path.Combine(ScenarioPath, "cases", reviewerCaseId);
-        Directory.CreateDirectory(Path.Combine(folder, "steps"));
-        Directory.CreateDirectory(Path.Combine(folder, "expected"));
-        string original = PublicCases.Folder(PublicCases.CleanCase);
-        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(original, "case.json")))!;
-        string pdfPath = manifest["input_documents"]![0]!["path"]!.GetValue<string>();
-        string destination = Path.Combine(folder, pdfPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        File.Copy(Path.Combine(original, pdfPath), destination);
-        manifest["case_id"] = reviewerCaseId;
-        File.WriteAllText(Path.Combine(folder, "case.json"), manifest.ToJsonString());
+        string folder = CopyCaseFolder(PublicCases.CleanCase, Path.Combine(ScenarioPath, "cases", ReviewerCaseId));
+        string manifestPath = Path.Combine(folder, "case.json");
+        var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))!;
+        manifest["case_id"] = ReviewerCaseId;
+        File.WriteAllText(manifestPath, manifest.ToJsonString());
+
         var firstStep = PublicCases.ReadFirstStep();
-        firstStep["case_id"] = reviewerCaseId;
+        firstStep["case_id"] = ReviewerCaseId;
         firstStep["document"]!["facts"]!["number"] = "REVIEWER-FACTS-MUST-NOT-LOAD";
         File.WriteAllText(Path.Combine(folder, "steps", "step-001.json"), firstStep.ToJsonString());
+        Directory.CreateDirectory(Path.Combine(folder, "expected"));
         File.WriteAllText(Path.Combine(folder, "expected", "step-001.json"), "EXPECTED DATA MUST NOT BE READ");
+        return folder;
     }
 
-    public WebApplicationFactory<Program> Start(bool loadCasesOnStartup = false) =>
+    public WebApplicationFactory<Program> Start() =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["DatasetPath"] = DatasetPath,
                 ["ScenarioPath"] = ScenarioPath,
                 ["DatabasePath"] = DatabasePath,
-                ["LoadCasesOnStartup"] = loadCasesOnStartup.ToString(),
                 ["Logging:LogLevel:Default"] = "Warning"
             })));
 
-    public void PrepareCleanCase(WebApplicationFactory<Program> application)
+    private static string CopyCaseFolder(string caseId, string destination)
     {
-        using var scope = application.Services.CreateScope();
-        Assert.True(File.Exists(DatabasePath));
-        var loader = scope.ServiceProvider.GetRequiredService<CaseLoader>();
-        loader.LoadCase("public", Path.Combine(DatasetPath, "cases", PublicCases.CleanCase), loadFixtureFacts: false);
+        string original = PublicCases.Folder(caseId);
+        foreach (string subdirectory in new[] { "steps", "documents" })
+        {
+            Directory.CreateDirectory(Path.Combine(destination, subdirectory));
+            foreach (string path in Directory.EnumerateFiles(Path.Combine(original, subdirectory)))
+                File.Copy(path, Path.Combine(destination, subdirectory, Path.GetFileName(path)));
+        }
+
+        File.Copy(Path.Combine(original, "case.json"), Path.Combine(destination, "case.json"));
+        return destination;
     }
 
     public void Dispose() => _directory.Dispose();

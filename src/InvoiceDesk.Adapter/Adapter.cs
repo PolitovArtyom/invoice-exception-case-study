@@ -64,11 +64,10 @@ public static class Adapter
 
         string caseId = input["case_id"]!.GetValue<string>();
         string asOf = input["as_of"]!.GetValue<string>();
-        if (!input["step"]!.AsValue().TryGetValue<int>(out int step))
-            throw new InvoiceValidationException("/step", "Step number is outside the supported integer range.");
+        int step = input["step"]!.GetValue<int>();
         IntakeValidation.ValidateDate(asOf, "/as_of");
 
-        var company = input["context"] is { } context ? IntakeValidation.ReadCompanyData(context, "/context") : null;
+        var companyData = input["context"] is { } context ? IntakeValidation.ReadCompanyData(context, "/context") : null;
         var reading = input["document"] is { } document
             ? new InvoiceReading(IntakeValidation.ReadFacts(document["facts"], "/document/facts"),
                 document["content_sha256"]!.GetValue<string>(), null, "runner")
@@ -80,7 +79,7 @@ public static class Adapter
             .UseSqlite(InvoiceDatabase.ConnectionString(databasePath)).Options);
         database.Database.Migrate();
         var updates = new CaseUpdates(new CaseRepository(database), new InvoiceEvaluator(), TimeProvider.System);
-        var result = updates.SubmitCaseInputs(new(caseId, "assignment", asOf, []), step, company, reading);
+        var result = updates.SubmitCaseInputs(new(caseId, "assignment", asOf, []), step, companyData, reading);
 
         stdout.WriteLine(InvoiceJson.Write(result));
         Console.Error.WriteLine($"Saved {caseId} revision {result.InputRevision} via adapter.");

@@ -3,9 +3,9 @@ using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Rules;
 
-internal static class Check
+internal sealed record CheckOutcome(InvoiceCheck Check, InvoiceQuestion? Question = null)
 {
-    public static InvoiceCheck Pass(string code, string objectId, InvoiceFacts facts,
+    public static CheckOutcome Pass(string code, string objectId, InvoiceFacts facts,
         IReadOnlyDictionary<string, CheckOperand> actual, IReadOnlyDictionary<string, CheckOperand> expected,
         params string[] fields)
     {
@@ -14,7 +14,7 @@ internal static class Check
             .Select(item => $"/evidence/{item.index}")
             .ToArray();
 
-        return new(code, objectId, "pass", null, null, actual, expected, evidenceRefs);
+        return new(new InvoiceCheck(code, objectId, "pass", null, null, actual, expected, evidenceRefs));
     }
 
     public static void Require(bool passes, string condition)

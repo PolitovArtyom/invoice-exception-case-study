@@ -6,13 +6,15 @@ namespace InvoiceDesk.Core.Rules.Parties;
 
 internal static class CurrencyMatchCheck
 {
-    public static InvoiceCheck Evaluate(InvoiceFacts facts, PurchaseOrder order)
-    {
-        Check.Require(facts.Currency == order.Currency, "CURRENCY_MATCH for an absent or different currency");
+    private const string Code = "CURRENCY_MATCH";
 
-        return Check.Pass("CURRENCY_MATCH", facts.DocumentId, facts,
+    public static CheckOutcome Evaluate(InvoiceFacts facts, PurchaseOrder order)
+    {
+        CheckOutcome.Require(facts.Currency == order.Currency, $"{Code} for an absent or different currency");
+
+        return CheckOutcome.Pass(Code, facts.DocumentId, facts,
             new Dictionary<string, CheckOperand> { ["currency"] = CheckOperand.Invoice(facts.Currency) },
-            new Dictionary<string, CheckOperand> { ["currency"] = CheckOperand.Company(order.Currency) },
+            new Dictionary<string, CheckOperand> { ["currency"] = CheckOperand.Order(order.Currency) },
             "/currency");
     }
 }

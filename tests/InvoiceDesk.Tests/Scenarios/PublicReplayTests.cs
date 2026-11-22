@@ -43,7 +43,7 @@ public sealed class PublicReplayTests
     }
 
     [Fact]
-    public void Should_fail_without_a_verdict_when_decimal_multiplication_would_round_before_cents()
+    public void Should_fail_without_a_verdict_when_an_amount_exceeds_the_supported_limit()
     {
         const string unitPrice = "70000000000000000000000000.01";
         const string declaredNet = "34930000000000000000000000.01";

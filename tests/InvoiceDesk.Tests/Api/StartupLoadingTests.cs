@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 using InvoiceDesk.Tests.Support;
 
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
@@ -14,7 +16,7 @@ public sealed class StartupLoadingTests
         environment.CopyCase("case-002");
         environment.CopyCase("case-004");
         environment.CopyCase("case-010");
-        await using (var app = environment.Start(loadCasesOnStartup: true))
+        await using (var app = environment.Start())
         {
             using var page = app.CreateClient();
 
@@ -22,7 +24,7 @@ public sealed class StartupLoadingTests
         }
 
         File.WriteAllText(Path.Combine(cleanFolder, "case.json"), "Existing case must be skipped.");
-        await using var restarted = environment.Start(loadCasesOnStartup: true);
+        await using var restarted = environment.Start();
         using var restartedPage = restarted.CreateClient();
         await AssertStartupCases(restartedPage);
     }
@@ -51,12 +53,15 @@ public sealed class StartupLoadingTests
     {
         using var environment = new CaseTestEnvironment();
         environment.AddReviewerCase();
-        await using var app = environment.Start(loadCasesOnStartup: true);
+        await using var app = environment.Start();
         using var page = app.CreateClient();
         await using var mcp = await ConnectMcp(app);
 
         var pending = await Read(page, "/api/cases/case-911");
         Assert.Equal("own", pending["case"]!["origin"]!.GetValue<string>());
+        Assert.Equal("not_read", pending["stage"]!.GetValue<string>());
+        var rows = await Read(page, "/api/cases");
+        AssertSameJson(Assert.Single(rows.AsArray())!["stage"], pending["stage"]);
         Assert.Equal(1, pending["current_revision"]!.GetValue<int>());
         Assert.Null(pending["revision"]!["document"]);
         Assert.Null(pending["revision"]!["result"]);
@@ -71,5 +76,24 @@ public sealed class StartupLoadingTests
         Assert.Equal("CTX-001-v1", pending["revision"]!["context_version"]!.GetValue<string>());
         Assert.DoesNotContain("REVIEWER-FACTS-MUST-NOT-LOAD", opened.ToJsonString(), StringComparison.Ordinal);
         Assert.DoesNotContain("EXPECTED DATA MUST NOT BE READ", opened.ToJsonString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Should_load_other_cases_when_one_case_folder_is_malformed()
+    {
+        using var environment = new CaseTestEnvironment();
+        environment.CopyCase(PublicCases.CleanCase);
+        environment.AddReviewerCase();
+        string malformed = Path.Combine(environment.ScenarioPath, "cases", "case-900");
+        Directory.CreateDirectory(malformed);
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(PublicCases.Folder(PublicCases.CleanCase), "case.json")))!;
+        manifest["case_id"] = "case-900";
+        File.WriteAllText(Path.Combine(malformed, "case.json"), manifest.ToJsonString());
+
+        await using var app = environment.Start();
+        using var page = app.CreateClient();
+
+        var cases = (await Read(page, "/api/cases")).AsArray();
+        Assert.Equal(new[] { "case-001", "case-911" }, cases.Select(item => item!["case_id"]!.GetValue<string>()));
     }
 }

@@ -35,8 +35,7 @@ using (var scope = app.Services.CreateScope())
     var database = scope.ServiceProvider.GetRequiredService<InvoiceDatabase>();
     Directory.CreateDirectory(Path.GetDirectoryName(database.Database.GetDbConnection().DataSource)!);
     database.Database.Migrate();
-    if (app.Configuration.GetValue("LoadCasesOnStartup", true))
-        scope.ServiceProvider.GetRequiredService<CaseLoader>().Load();
+    scope.ServiceProvider.GetRequiredService<CaseLoader>().Load();
 }
 
 if (app.Environment.WebRootPath is not null)

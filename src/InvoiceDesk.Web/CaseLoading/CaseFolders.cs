@@ -16,19 +16,14 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
     public IEnumerable<string> CaseDirectories(string root)
     {
         string parent = Path.Combine(GetRoot(root), "cases");
-        if (!Directory.Exists(parent) || IsLink(parent))
+        if (root == "own" && !Directory.Exists(parent))
             return [];
 
-        return Directory.EnumerateDirectories(parent).Where(directory => !IsLink(directory)).Order(StringComparer.Ordinal);
+        return Directory.EnumerateDirectories(parent).Order(StringComparer.Ordinal);
     }
 
-    public string? FindPdf(InvoiceSource source)
-    {
-        if (!string.Equals(Path.GetExtension(source.RelativePath), ".pdf", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        return FindFile(GetRoot(source.Root), source.RelativePath);
-    }
+    public string? FindPdf(InvoiceSource source) =>
+        FindFile(GetRoot(source.Root), source.RelativePath);
 
     public static string HostPath(InvoiceSource source) =>
         (source.Root == "public" ? "dataset/" : "scenarios/") + source.RelativePath;
@@ -48,21 +43,9 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
 
     public static string? FindFile(string directory, string relativePath)
     {
-        var parts = relativePath.Split('/');
-        if (parts.Any(part => part is "" or "." or ".." || part.Contains('\\') || part.Contains(':')))
-            return null;
-
-        string path = directory;
-        foreach (string part in parts)
-        {
-            path = Path.Combine(path, part);
-            if (!Path.Exists(path) || IsLink(path))
-                return null;
-        }
+        string path = Path.Combine(directory, relativePath);
         return File.Exists(path) ? path : null;
     }
-
-    private static bool IsLink(string path) => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
 
     private string GetRoot(string root) => root switch
     {

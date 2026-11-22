@@ -15,7 +15,6 @@ namespace InvoiceDesk.Core.Storage.Migrations
                     Id = table.Column<string>(type: "TEXT", nullable: false),
                     Origin = table.Column<string>(type: "TEXT", nullable: false),
                     AsOf = table.Column<string>(type: "TEXT", nullable: false),
-                    PolicyVersion = table.Column<string>(type: "TEXT", nullable: false),
                     Sources = table.Column<string>(type: "TEXT", nullable: false),
                     CurrentRevision = table.Column<int>(type: "INTEGER", nullable: false)
                 },
@@ -52,8 +51,7 @@ namespace InvoiceDesk.Core.Storage.Migrations
                     Id = table.Column<long>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     CaseId = table.Column<string>(type: "TEXT", nullable: false),
-                    ExternalDocumentId = table.Column<string>(type: "TEXT", nullable: false),
-                    ImportOrder = table.Column<int>(type: "INTEGER", nullable: false),
+                    ImportRevision = table.Column<int>(type: "INTEGER", nullable: false),
                     ContentSha256 = table.Column<string>(type: "TEXT", nullable: false),
                     Facts = table.Column<string>(type: "TEXT", nullable: false),
                     Source = table.Column<string>(type: "TEXT", nullable: true),
@@ -110,9 +108,9 @@ namespace InvoiceDesk.Core.Storage.Migrations
                 column: "CaseId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Documents_CaseId_ImportOrder",
+                name: "IX_Documents_CaseId_ImportRevision",
                 table: "Documents",
-                columns: new[] { "CaseId", "ImportOrder" },
+                columns: new[] { "CaseId", "ImportRevision" },
                 unique: true);
 
             migrationBuilder.CreateIndex(

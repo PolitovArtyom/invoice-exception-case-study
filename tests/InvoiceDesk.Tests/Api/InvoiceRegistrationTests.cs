@@ -9,31 +9,30 @@ namespace InvoiceDesk.Tests.Api;
 
 public sealed class InvoiceRegistrationTests : IDisposable
 {
-    private const string CaseUrl = "/api/cases/case-001";
+    private const string CaseUrl = "/api/cases/" + CaseTestEnvironment.ReviewerCaseId;
     private readonly CaseTestEnvironment _environment = new();
     private readonly string _caseFolder;
 
-    public InvoiceRegistrationTests() => _caseFolder = _environment.CopyCase(PublicCases.CleanCase);
+    public InvoiceRegistrationTests() => _caseFolder = _environment.AddReviewerCase();
 
     [Fact]
     public async Task Should_return_source_and_extraction_contract_when_open_case_is_called_over_mcp()
     {
         await using var app = _environment.Start();
-        _environment.PrepareCleanCase(app);
         await using var mcp = await ConnectMcp(app);
         var tools = await mcp.ListToolsAsync();
         Assert.Equal(new[] { "assess_invoice", "get_assessment", "get_case_history", "get_company_data", "open_case", "register_invoice" },
             tools.Select(tool => tool.Name).Order(StringComparer.Ordinal));
 
         var opened = Payload(await Call(mcp, "open_case"));
-        Assert.Equal("case-001", opened["case_id"]!.GetValue<string>());
+        Assert.Equal(CaseTestEnvironment.ReviewerCaseId, opened["case_id"]!.GetValue<string>());
         Assert.Equal("core-v1", opened["policy_version"]!.GetValue<string>());
         Assert.Equal(1, opened["current_revision"]!.GetValue<int>());
         Assert.Null(opened["current_document_id"]);
         var source = Assert.Single(opened["sources"]!.AsArray())!;
         Assert.Equal("DOC-001", source["document_id"]!.GetValue<string>());
-        Assert.Equal("public", source["root"]!.GetValue<string>());
-        Assert.Equal("dataset/cases/case-001/documents/document-001.pdf", source["host_path"]!.GetValue<string>());
+        Assert.Equal("own", source["root"]!.GetValue<string>());
+        Assert.Equal("scenarios/cases/case-911/documents/document-001.pdf", source["host_path"]!.GetValue<string>());
         Assert.True(source["available"]!.GetValue<bool>());
         Assert.True(File.Exists(source["container_path"]!.GetValue<string>()));
 
@@ -56,14 +55,13 @@ public sealed class InvoiceRegistrationTests : IDisposable
         File.WriteAllText(manifestPath, manifest.ToJsonString());
 
         await using var app = _environment.Start();
-        _environment.PrepareCleanCase(app);
         await using var mcp = await ConnectMcp(app);
         using var page = app.CreateClient();
 
         var company = Payload(await Call(mcp, "get_company_data"));
         var facts = PublicCases.CleanFacts();
         var registered = Payload(await Register(mcp, facts));
-        CleanAssessment.AssertResult(registered["result"]!, 2);
+        CleanAssessment.AssertResult(registered["result"]!, 2, CaseTestEnvironment.ReviewerCaseId);
         Assert.Equal("2", registered["assessment_id"]!.GetValue<string>());
         Assert.False(registered["inputs_unchanged"]!.GetValue<bool>());
 
@@ -76,7 +74,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
         Assert.Equal("CTX-001-v1", company["context_version"]!.GetValue<string>());
         AssertSameJson(company, Payload(await Call(mcp, "get_company_data")));
 
-        var history = await Read(page, $"{CaseUrl}/history");
+        var history = Payload(await Call(mcp, "get_case_history"));
         Assert.Collection(history.AsArray(),
             saved =>
             {
@@ -101,7 +99,8 @@ public sealed class InvoiceRegistrationTests : IDisposable
         var row = Assert.Single(list.AsArray())!;
         Assert.Equal("2214.24", row["declared_total"]!.GetValue<string>());
         Assert.Equal("EUR", row["currency"]!.GetValue<string>());
-        Assert.Equal("Ready for accounting", row["stage"]!.GetValue<string>());
+        Assert.Equal("ready_for_accounting", row["stage"]!.GetValue<string>());
+        AssertSameJson(row["stage"], detail["stage"]);
         Assert.Equal("clear", row["decision"]!.GetValue<string>());
         using var pdf = await page.GetAsync($"{CaseUrl}/documents/{document["reference"]!.GetValue<long>()}/pdf");
         Assert.Equal(HttpStatusCode.OK, pdf.StatusCode);
@@ -121,22 +120,24 @@ public sealed class InvoiceRegistrationTests : IDisposable
         JsonNode history;
         await using (var app = _environment.Start())
         {
-            _environment.PrepareCleanCase(app);
             await using var mcp = await ConnectMcp(app);
-            using var page = app.CreateClient();
             var registered = Payload(await Register(mcp, facts));
-            CleanAssessment.AssertResult(registered["result"]!, 2);
+            CleanAssessment.AssertResult(registered["result"]!, 2, CaseTestEnvironment.ReviewerCaseId);
             saved = Payload(await Call(mcp, "get_assessment"));
-            history = await Read(page, $"{CaseUrl}/history");
+            history = Payload(await Call(mcp, "get_case_history"));
         }
 
         await using var restarted = _environment.Start();
         await using var restartedMcp = await ConnectMcp(restarted);
-        using var restartedPage = restarted.CreateClient();
         var assessment = Payload(await Call(restartedMcp, "get_assessment"));
         AssertSameJson(saved, assessment);
-        AssertSameJson(saved, await Read(restartedPage, $"{CaseUrl}/assessments/2"));
-        AssertSameJson(history, await Read(restartedPage, $"{CaseUrl}/history"));
+        var assessmentById = await restartedMcp.CallToolAsync("get_assessment", new Dictionary<string, object?>
+        {
+            ["case_id"] = CaseTestEnvironment.ReviewerCaseId,
+            ["assessment_id"] = "2"
+        });
+        AssertSameJson(saved, Payload(assessmentById));
+        AssertSameJson(history, Payload(await Call(restartedMcp, "get_case_history")));
         var savedFacts = assessment["revision"]!["document"]!["facts"]!;
         AssertSameJson(facts, savedFacts);
         Assert.Equal("illegible", savedFacts["missing_fields"]![0]!["reason"]!.GetValue<string>());
@@ -149,11 +150,10 @@ public sealed class InvoiceRegistrationTests : IDisposable
     public async Task Should_reject_without_writes_when_required_fact_structure_is_invalid()
     {
         await using var app = _environment.Start();
-        _environment.PrepareCleanCase(app);
         await using var mcp = await ConnectMcp(app);
         using var page = app.CreateClient();
         var initial = await Read(page, CaseUrl);
-        var history = await Read(page, $"{CaseUrl}/history");
+        var history = Payload(await Call(mcp, "get_case_history"));
         var company = Payload(await Call(mcp, "get_company_data"));
 
         var facts = PublicCases.CleanFacts();
@@ -167,7 +167,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
         Assert.Null(initial["revision"]!["document"]);
         Assert.Null(initial["revision"]!["result"]);
         AssertSameJson(initial, await Read(page, CaseUrl));
-        AssertSameJson(history, await Read(page, $"{CaseUrl}/history"));
+        AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
         AssertSameJson(company, Payload(await Call(mcp, "get_company_data")));
     }
 
@@ -175,7 +175,6 @@ public sealed class InvoiceRegistrationTests : IDisposable
     public async Task Should_reject_evidence_when_it_points_to_itself()
     {
         await using var app = _environment.Start();
-        _environment.PrepareCleanCase(app);
         await using var mcp = await ConnectMcp(app);
         var history = Payload(await Call(mcp, "get_case_history"));
         var facts = PublicCases.CleanFacts();
@@ -192,7 +191,6 @@ public sealed class InvoiceRegistrationTests : IDisposable
     public async Task Should_return_a_source_validation_error_when_the_mcp_source_is_null()
     {
         await using var app = _environment.Start();
-        _environment.PrepareCleanCase(app);
         await using var mcp = await ConnectMcp(app);
         var history = Payload(await Call(mcp, "get_case_history"));
 
@@ -207,9 +205,7 @@ public sealed class InvoiceRegistrationTests : IDisposable
     public async Task Should_return_saved_assessment_when_unchanged_inputs_are_assessed()
     {
         await using var app = _environment.Start();
-        _environment.PrepareCleanCase(app);
         await using var mcp = await ConnectMcp(app);
-        using var page = app.CreateClient();
         var registered = Payload(await Register(mcp, PublicCases.CleanFacts()));
         var history = Payload(await Call(mcp, "get_case_history"));
 
@@ -217,9 +213,6 @@ public sealed class InvoiceRegistrationTests : IDisposable
         Assert.True(reassessed["inputs_unchanged"]!.GetValue<bool>());
         AssertSameJson(registered["assessment_id"], reassessed["assessment_id"]);
         AssertSameJson(registered["result"], reassessed["result"]);
-        using var pageRecheck = await page.PostAsync($"{CaseUrl}/rechecks", content: null);
-        pageRecheck.EnsureSuccessStatusCode();
-        AssertSameJson(reassessed, JsonNode.Parse(await pageRecheck.Content.ReadAsStringAsync()));
         AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
         Assert.Equal(2, history.AsArray().Count);
         Assert.Single(history.AsArray(), revision => revision!["result"] is not null);

@@ -5,14 +5,16 @@ namespace InvoiceDesk.Core.Rules.Pricing;
 
 internal static class LineArithmeticCheck
 {
-    public static (LineAmounts Amounts, InvoiceCheck Verdict) Evaluate(InvoiceFacts facts, InvoiceLine line, int index)
+    private const string Code = "LINE_ARITHMETIC";
+
+    public static (LineAmounts Amounts, CheckOutcome Outcome) Evaluate(InvoiceFacts facts, InvoiceLine line, int index)
     {
         var amounts = LineAmounts.Calculate(line);
-        Check.Require(amounts.Net == InvoiceDecimal.Parse(line.DeclaredNetAmount) &&
+        CheckOutcome.Require(amounts.Net == InvoiceDecimal.Parse(line.DeclaredNetAmount) &&
             (line.DeclaredTaxAmount is null || amounts.Tax == InvoiceDecimal.Parse(line.DeclaredTaxAmount)),
-            $"LINE_ARITHMETIC with inconsistent declared amounts for {line.LineId}");
+            $"{Code} with inconsistent declared amounts for {line.LineId}");
 
-        return (amounts, Check.Pass("LINE_ARITHMETIC", line.LineId, facts,
+        return (amounts, CheckOutcome.Pass(Code, line.LineId, facts,
             new Dictionary<string, CheckOperand>
             {
                 ["quantity"] = CheckOperand.Invoice(line.Quantity),
