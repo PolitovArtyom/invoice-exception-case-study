@@ -45,7 +45,7 @@ internal sealed class CaseTestEnvironment : IDisposable
         return folder;
     }
 
-    public WebApplicationFactory<Program> Start() =>
+    public WebApplicationFactory<Program> Start(string? databasePath = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
             builder.ConfigureAppConfiguration(
                 (_, config) =>
@@ -54,7 +54,7 @@ internal sealed class CaseTestEnvironment : IDisposable
                         {
                             ["DatasetPath"] = DatasetPath,
                             ["ScenarioPath"] = ScenarioPath,
-                            ["DatabasePath"] = DatabasePath,
+                            ["DatabasePath"] = databasePath ?? DatabasePath,
                             ["Logging:LogLevel:Default"] = "Warning",
                         }
                     )

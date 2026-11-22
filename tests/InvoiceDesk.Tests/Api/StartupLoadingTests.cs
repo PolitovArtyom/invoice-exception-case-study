@@ -20,6 +20,8 @@ public sealed class StartupLoadingTests
                 "case-005",
                 "case-006",
                 "case-007",
+                "case-008",
+                "case-009",
                 "case-010",
             }
         )
@@ -49,6 +51,8 @@ public sealed class StartupLoadingTests
                 "case-005",
                 "case-006",
                 "case-007",
+                "case-008",
+                "case-009",
                 "case-010",
             },
             list.Select(row => row!["case_id"]!.GetValue<string>())
@@ -63,7 +67,9 @@ public sealed class StartupLoadingTests
                 ("case-002", "clear"),
                 ("case-003", "blocked"),
                 ("case-005", "blocked"),
+                ("case-006", "blocked"),
                 ("case-007", "blocked"),
+                ("case-009", "blocked"),
             }
         )
         {
@@ -73,12 +79,7 @@ public sealed class StartupLoadingTests
         }
 
         foreach (
-            var (id, version) in new[]
-            {
-                ("case-004", "CTX-004-v1"),
-                ("case-006", "CTX-006-v1"),
-                ("case-010", "CTX-010-v1"),
-            }
+            var (id, version) in new[] { ("case-004", "CTX-004-v1"), ("case-010", "CTX-010-v1") }
         )
         {
             var pending = await Read(page, $"/api/cases/{id}");

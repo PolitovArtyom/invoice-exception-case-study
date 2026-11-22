@@ -36,11 +36,36 @@ public sealed class InvoiceEvaluator
         string caseId,
         int step,
         RevisionInputs inputs,
-        IReadOnlyList<EarlierImport> earlierImports
+        InvoiceParties parties,
+        InvoiceImportMatch? importMatch
     )
     {
-        var context = BuildContext(inputs, earlierImports);
-        string documentId = context.Facts.DocumentId;
+        string documentId = inputs.Facts!.DocumentId;
+        var result = new InvoiceResult(
+            "1.0",
+            caseId,
+            step,
+            CaseMetadata.PolicyVersion,
+            inputs.CompanyData.ContextVersion,
+            inputs.Number,
+            documentId,
+            importMatch is null ? ImportDisposition.New
+                : importMatch.IsDuplicate ? ImportDisposition.Duplicate
+                : ImportDisposition.Conflict,
+            importMatch?.Original.DocumentId,
+            importMatch is { IsDuplicate: true } ? importMatch.Original.AssessmentId : null,
+            null,
+            null,
+            [],
+            null,
+            [],
+            null,
+            []
+        );
+        if (importMatch is { IsDuplicate: true })
+            return result;
+
+        var context = BuildContext(inputs, parties, importMatch);
         var verdicts = DocumentChecks
             .Select(check => (check.Code, ObjectId: documentId, Verdict: check.Evaluate(context)))
             .Concat(
@@ -67,41 +92,29 @@ public sealed class InvoiceEvaluator
             ))
             .ToArray();
 
-        return new(
-            "1.0",
-            caseId,
-            step,
-            CaseMetadata.PolicyVersion,
-            context.CompanyData.ContextVersion,
-            inputs.Number,
-            documentId,
-            ImportDisposition.New,
-            null,
-            null,
-            context.Order?.OrderId,
-            context.Order is null ? null : MatchSource.Deterministic,
-            context.Lines.Select(LineResult).ToArray(),
-            context.Totals,
-            checks,
-            InvoiceDecision.From(checks),
-            InvoiceQuestions.From(verdicts.Select(item => (item.ObjectId, item.Verdict)))
-        );
+        return result with
+        {
+            MatchedOrderId = context.Order?.OrderId,
+            OrderMatchSource = context.Order is null ? null : MatchSource.Deterministic,
+            Lines = context.Lines.Select(LineResult).ToArray(),
+            Totals = context.Totals,
+            Checks = checks,
+            Decision = InvoiceDecision.From(checks),
+            Questions = InvoiceQuestions.From(
+                verdicts.Select(item => (item.ObjectId, item.Verdict))
+            ),
+        };
     }
 
     private static CheckContext BuildContext(
         RevisionInputs inputs,
-        IReadOnlyList<EarlierImport> earlierImports
+        InvoiceParties parties,
+        InvoiceImportMatch? importMatch
     )
     {
         var facts = inputs.Facts!;
         var companyData = inputs.CompanyData;
         var order = InvoiceMatches.FindOrder(facts, companyData);
-        var supplier = InvoiceMatches.FindSupplier(facts, companyData);
-        var buyer = InvoiceMatches.FindBuyer(facts, companyData);
-        var key =
-            supplier is null || buyer is null
-                ? null
-                : InvoiceBusinessKey.From(facts, supplier, buyer);
 
         var lines = facts
             .Lines.Zip(InvoiceMatches.FindLines(facts, order), (invoice, match) =>
@@ -109,7 +122,12 @@ public sealed class InvoiceEvaluator
                 var quantities =
                     match is null || order is null
                         ? null
-                        : LineQuantities.Calculate(order, match.OrderLine, companyData, key);
+                        : LineQuantities.Calculate(
+                            order,
+                            match.OrderLine,
+                            companyData,
+                            parties.Key
+                        );
                 return new MatchedLine(
                     invoice,
                     match?.OrderLine,
@@ -125,13 +143,12 @@ public sealed class InvoiceEvaluator
         return new(
             facts,
             companyData,
-            supplier,
-            buyer,
+            parties.Supplier,
+            parties.Buyer,
             order,
             lines,
-            key,
-            companyData.InvoiceHistory.Documents,
-            earlierImports,
+            parties.Key,
+            importMatch,
             totals
         );
     }

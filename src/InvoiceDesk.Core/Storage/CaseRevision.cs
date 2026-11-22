@@ -19,5 +19,9 @@ internal sealed class CaseRevision
 
     public long SnapshotId { get; init; }
 
+    public OriginalInvoice? OriginalInvoice { get; init; }
+
+    public DuplicateAttempt? DuplicateAttempt { get; init; }
+
     public InvoiceResult? Result { get; init; }
 }

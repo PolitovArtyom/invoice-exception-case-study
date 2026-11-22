@@ -8,19 +8,17 @@ internal sealed class CurrencyMatchCheck : IDocumentCheck
 
     public Verdict Evaluate(CheckContext context)
     {
-        var order = context.Order;
-        string? currency = context.Facts.Currency;
-        UnsupportedInvoiceCaseException.Require(
-            order is not null && currency == order.Currency,
-            Code,
-            "for a missing order or an absent or different currency"
-        );
+        if (context.Facts.Currency is not { } currency)
+            return Verdict.MissingFact(RequiredFact.DocumentCurrency);
+        if (context.Order is not { } order)
+            return Verdict.DependsOn(CheckCode.OrderMatch);
 
-        return Verdict.Pass(
-            new Comparison(
-                Actual: [Operand.Invoice("currency", currency)],
-                Expected: [Operand.Order("currency", order.Currency)]
-            )
+        var comparison = new Comparison(
+            Actual: [Operand.Invoice("currency", currency)],
+            Expected: [Operand.Order("currency", order.Currency)]
         );
+        return currency == order.Currency
+            ? Verdict.Pass(comparison)
+            : Verdict.Fail(Severity.Blocked, comparison);
     }
 }

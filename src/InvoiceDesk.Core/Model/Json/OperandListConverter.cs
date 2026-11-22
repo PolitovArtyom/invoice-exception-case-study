@@ -17,11 +17,7 @@ internal sealed class OperandListConverter : JsonConverter<Operand[]>
             options
         )!;
         return saved
-            .Select(item => new Operand(
-                item.Key,
-                ReadValue(item.Value.Value, options),
-                item.Value.Source
-            ))
+            .Select(item => new Operand(item.Key, ReadValue(item.Value.Value), item.Value.Source))
             .ToArray();
     }
 
@@ -40,14 +36,12 @@ internal sealed class OperandListConverter : JsonConverter<Operand[]>
         writer.WriteEndObject();
     }
 
-    private static object? ReadValue(JsonElement value, JsonSerializerOptions options) =>
+    private static object? ReadValue(JsonElement value) =>
         value.ValueKind switch
         {
             JsonValueKind.Null => null,
             JsonValueKind.String => value.GetString(),
-            JsonValueKind.Array => value.Deserialize<string[]>(options),
-            JsonValueKind.Object => value.Deserialize<Dictionary<string, string>>(options),
-            _ => throw new JsonException("Unexpected comparison operand value."),
+            _ => value,
         };
 
     private sealed record SavedOperand(JsonElement Value, OperandSource Source);

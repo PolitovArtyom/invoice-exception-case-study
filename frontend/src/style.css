@@ -486,3 +486,64 @@ summary {
 .totals-comparison td {
   white-space: nowrap;
 }
+
+.case-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.case-filters button {
+  border: 1px solid #c9d2df;
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  background: white;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.case-filters [aria-pressed='true'] {
+  border-color: #425a80;
+  background: #e9eff8;
+  font-weight: 600;
+}
+
+.fact-group {
+  border-top: 1px solid #e2e8f0;
+  padding: 0.6rem 0;
+}
+
+.fact-group summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fact-table {
+  table-layout: fixed;
+}
+
+.fact-table th:first-child {
+  width: 23%;
+}
+
+.fact-table th,
+.fact-table td {
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.fact-values {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fact-values li + li {
+  margin-top: 0.35rem;
+}
+
+.fact-values q {
+  white-space: pre-wrap;
+  margin-right: 0.45rem;
+}

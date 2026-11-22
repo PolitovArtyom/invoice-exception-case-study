@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { documentPdf, getCase, type CaseView, type ReadingOrigin } from '../api'
+import {
+  documentPdf,
+  getCase,
+  revisionPdf,
+  type CaseView,
+  type ReadingOrigin,
+} from '../api'
+import ConflictDifferences from '../components/ConflictDifferences.vue'
+import InvoiceFactsPanel from '../components/InvoiceFactsPanel.vue'
 import ChecksTable from '../components/ChecksTable.vue'
 import DecisionTag from '../components/DecisionTag.vue'
 import InvoiceLineCard from '../components/InvoiceLineCard.vue'
@@ -22,7 +30,27 @@ const props = defineProps<{ caseId: string }>()
 const view = ref<CaseView | null>(null)
 const error = ref('')
 const document = computed(() => view.value?.revision.document)
-const facts = computed(() => document.value?.facts)
+const duplicate = computed(
+  () => view.value?.revision.duplicate_attempt?.reading,
+)
+const facts = computed(() => document.value?.facts ?? duplicate.value?.facts)
+const readingOrigin = computed(
+  () => document.value?.reading_origin ?? duplicate.value?.reading_origin,
+)
+const pdf = computed(() => {
+  if (!view.value?.invoice_pdf_available) return undefined
+  if (document.value?.source)
+    return documentPdf(props.caseId, document.value.reference)
+  if (duplicate.value?.source && view.value)
+    return revisionPdf(props.caseId, view.value.revision.number, 'duplicate')
+  return undefined
+})
+const original = computed(() => view.value?.revision.original_invoice)
+const originalPdf = computed(() =>
+  view.value?.original_pdf_available
+    ? revisionPdf(props.caseId, view.value.revision.number, 'original')
+    : undefined,
+)
 const result = computed(() => view.value?.revision.result)
 
 const totalsCheck = computed(() =>
@@ -103,8 +131,13 @@ onMounted(async () => {
           >
           <SourceTag source="invoice" />
         </p>
-        <DecisionTag :decision="result?.decision ?? null" />
-        <p v-if="view.stage === 'ready_for_accounting'" class="stage">
+        <DecisionTag :decision="result?.decision ?? null" :stage="view.stage" />
+        <p
+          v-if="
+            view.stage === 'ready_for_accounting' || view.stage === 'closed'
+          "
+          class="stage"
+        >
           {{ caseStageLabel(view.stage) }}
         </p>
       </div>
@@ -113,23 +146,52 @@ onMounted(async () => {
           >Revision {{ view.revision.number }} ·
           <span class="mono">{{ view.revision.context_version }}</span></span
         >
-        <span v-if="document">{{
-          readingOriginLabels[document.reading_origin]
+        <span v-if="readingOrigin">{{
+          readingOriginLabels[readingOrigin]
         }}</span>
-        <a
-          v-if="document?.source"
-          :href="documentPdf(caseId, document.reference)"
-          target="_blank"
-          rel="noopener"
+        <a v-if="pdf" :href="pdf" target="_blank" rel="noopener"
           >Open invoice PDF ↗</a
         >
+        <span v-else-if="facts" class="muted">Invoice PDF unavailable</span>
       </div>
     </section>
+    <section
+      v-if="view.stage === 'closed' && original"
+      class="card"
+      aria-labelledby="duplicate-heading"
+    >
+      <h2 id="duplicate-heading">Closed as duplicate</h2>
+      <p>
+        Resend of
+        <a
+          v-if="originalPdf"
+          :href="originalPdf"
+          target="_blank"
+          rel="noopener"
+          >{{ original.document_id }}</a
+        >
+        <span v-else class="mono">{{ original.document_id }}</span>. This resend
+        requires no further processing.
+      </p>
+    </section>
+    <p v-if="view.latest_duplicate_revision !== null" class="card">
+      Duplicate received at revision {{ view.latest_duplicate_revision }}
+    </p>
+    <p v-if="view.inputs_changed" class="card">
+      Company data changed after this assessment. A new assessment is required
+      before accounting.
+    </p>
     <template v-if="result && facts">
       <NeedsAttention
         :checks="result.checks"
         :lines="facts.lines"
         :currency="facts.currency"
+      />
+      <ConflictDifferences
+        v-if="original"
+        :checks="result.checks"
+        :original-id="original.document_id"
+        :pdf="originalPdf"
       />
       <section
         v-if="lineCards.length"
@@ -152,18 +214,8 @@ onMounted(async () => {
         :check="totalsCheck"
       />
       <ChecksTable :checks="result.checks" :facts="facts" />
-      <details v-if="facts?.evidence.length" class="card">
-        <summary>Invoice evidence</summary>
-        <dl class="operands">
-          <div v-for="(citation, index) in facts.evidence" :key="index">
-            <dt>
-              <code>{{ citation.field_path }}</code> · Page {{ citation.page }}
-            </dt>
-            <dd>{{ citation.excerpt }}</dd>
-          </div>
-        </dl>
-      </details>
     </template>
+    <InvoiceFactsPanel v-if="facts" :facts="facts" :pdf="pdf" />
     <p v-else class="waiting-note">The agent has not read this invoice yet.</p>
   </template>
 </template>

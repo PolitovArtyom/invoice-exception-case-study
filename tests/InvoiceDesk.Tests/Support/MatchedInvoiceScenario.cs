@@ -3,6 +3,7 @@ using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Validation;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
 
@@ -161,52 +162,107 @@ internal sealed record MatchedInvoiceScenario(InvoiceFacts Facts, CompanyData Co
             },
         };
 
+    public MatchedInvoiceScenario WithCountedInvoice(InvoiceFacts original, string documentId) =>
+        this with
+        {
+            CompanyData = CompanyData with
+            {
+                InvoiceHistory = new(
+                    "1.0",
+                    [
+                        new(
+                            documentId,
+                            "S",
+                            "B",
+                            DocumentType.Invoice,
+                            original.Number,
+                            "EUR",
+                            PreviousInvoiceStatus.Counted,
+                            "O",
+                            new string('a', 64),
+                            [new("L", "OL", 4m)],
+                            new(
+                                original.IssueDate,
+                                original.DueDate,
+                                "EUR",
+                                "PO-BASELINE",
+                                ApprovedIban,
+                                10.00m,
+                                2.00m,
+                                12.00m,
+                                [new("GLOVE", 1m, "pcs", 10.00m, 0.20m, 10.00m, 2.00m)]
+                            )
+                        ),
+                    ]
+                ),
+            },
+        };
+
     public async Task<JsonNode> RegisterAndRead()
     {
         using var environment = new CaseTestEnvironment();
         await using var app = environment.Start();
         using var page = app.CreateClient();
-        var source = new InvoiceSource(
-            SourceRoot.Own,
-            "document-001.pdf",
-            "09e11592605b5a234e9e2e3df698972f3fd3e8569c6175701676d832b6f83837",
-            "D"
-        );
-        Directory.CreateDirectory(environment.ScenarioPath);
-        File.Copy(
-            Path.Combine(
-                PublicCases.Folder(PublicCases.CleanCase),
-                "documents",
-                "document-001.pdf"
-            ),
-            Path.Combine(environment.ScenarioPath, source.RelativePath)
-        );
-        using (var scope = app.Services.CreateScope())
-        {
-            var companyData = IntakeValidation.ReadCompanyData(
-                JsonNode.Parse(InvoiceJson.Write(CompanyData)),
-                "/context"
-            );
-            var cases = scope.ServiceProvider.GetRequiredService<CaseService>();
-            Assert.True(
-                cases.LoadCase(
-                    new(CaseId, CaseOrigin.Own, Facts.IssueDate, [source]),
-                    companyData,
-                    null
-                )
-            );
-        }
-
+        Prepare(environment, app);
         await using var mcp = await ConnectMcp(app);
-        var registration = Payload(
-            await Register(
-                mcp,
-                JsonNode.Parse(InvoiceJson.Write(Facts))!,
-                new { root = "own", relative_path = source.RelativePath }
-            )
-        );
+        var registration = Payload(await Register(mcp, RawFacts(Facts), Source()));
         var saved = await Read(page, $"/api/cases/{CaseId}");
         AssertSameJson(registration["result"], saved["revision"]!["result"]);
         return saved["revision"]!["result"]!;
+    }
+
+    public void Prepare(
+        CaseTestEnvironment environment,
+        WebApplicationFactory<Program> app,
+        string? secondDocumentId = null
+    )
+    {
+        Directory.CreateDirectory(environment.ScenarioPath);
+        var sources = new List<InvoiceSource>
+        {
+            CopySource(environment, Facts.DocumentId, second: false),
+        };
+        if (secondDocumentId is not null)
+            sources.Add(CopySource(environment, secondDocumentId, second: true));
+
+        using var scope = app.Services.CreateScope();
+        var companyData = IntakeValidation.ReadCompanyData(
+            JsonNode.Parse(InvoiceJson.Write(CompanyData)),
+            "/context"
+        );
+        var cases = scope.ServiceProvider.GetRequiredService<CaseService>();
+        Assert.True(
+            cases.LoadCase(new(CaseId, CaseOrigin.Own, Facts.IssueDate, sources), companyData, null)
+        );
+    }
+
+    public static JsonObject RawFacts(InvoiceFacts facts) =>
+        JsonNode.Parse(InvoiceJson.Write(facts))!.AsObject();
+
+    public static object Source(bool second = false) =>
+        new { root = "own", relative_path = SourceFile(second) };
+
+    private static string SourceFile(bool second) =>
+        second ? "document-002.pdf" : "document-001.pdf";
+
+    private static InvoiceSource CopySource(
+        CaseTestEnvironment environment,
+        string documentId,
+        bool second
+    )
+    {
+        string path = Path.Combine(environment.ScenarioPath, SourceFile(second));
+        File.Copy(
+            Path.Combine(
+                PublicCases.Folder(second ? "case-008" : PublicCases.CleanCase),
+                "documents",
+                "document-001.pdf"
+            ),
+            path
+        );
+        string sha256 = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))
+        );
+        return new(SourceRoot.Own, SourceFile(second), sha256, documentId);
     }
 }

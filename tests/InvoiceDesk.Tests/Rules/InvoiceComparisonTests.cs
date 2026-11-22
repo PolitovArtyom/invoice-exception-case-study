@@ -92,8 +92,7 @@ public sealed class InvoiceComparisonTests
                 ),
             ],
             null,
-            [],
-            [],
+            null,
             new(10.00m, 2.00m, 12.00m)
         );
     }

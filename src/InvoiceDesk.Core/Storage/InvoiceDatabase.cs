@@ -62,6 +62,12 @@ public sealed class InvoiceDatabase(DbContextOptions<InvoiceDatabase> options) :
             .Property(row => row.Result)
             .HasConversion(new InvoiceJsonConversion<Model.Results.InvoiceResult?>());
         revisions
+            .Property(row => row.OriginalInvoice)
+            .HasConversion(new InvoiceJsonConversion<OriginalInvoice?>());
+        revisions
+            .Property(row => row.DuplicateAttempt)
+            .HasConversion(new InvoiceJsonConversion<DuplicateAttempt?>());
+        revisions
             .HasOne<InvoiceCase>()
             .WithMany()
             .HasForeignKey(row => row.CaseId)

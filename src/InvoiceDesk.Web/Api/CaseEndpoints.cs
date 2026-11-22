@@ -9,32 +9,29 @@ internal static class CaseEndpoints
     public static void MapCaseEndpoints(this WebApplication app)
     {
         var cases = app.MapGroup("/api/cases");
-        cases.MapGet("", (CaseService service) => Json(service.List()));
-        cases.MapGet("/{caseId}", (string caseId, CaseService service) =>
-            Found(service.Read(caseId))
+        cases.MapGet("", (CaseReader reader) => Json(reader.List()));
+        cases.MapGet("/{caseId}", (string caseId, CaseReader reader, CasePdfs pdfs) =>
+            reader.Read(caseId) is { } view ? Json(pdfs.WithAvailability(view)) : Results.NotFound()
         );
-        cases.MapGet("/{caseId}/documents/{reference:long}/pdf", ReadDocument);
+        cases.MapGet(
+            "/{caseId}/documents/{reference:long}/pdf",
+            (string caseId, long reference, CasePdfs pdfs) =>
+                Pdf(pdfs.FindDocument(caseId, reference))
+        );
+        cases.MapGet(
+            "/{caseId}/revisions/{number:int}/duplicate-pdf",
+            (string caseId, int number, CasePdfs pdfs) => Pdf(pdfs.FindDuplicate(caseId, number))
+        );
+        cases.MapGet(
+            "/{caseId}/revisions/{number:int}/original-pdf",
+            (string caseId, int number, CasePdfs pdfs) => Pdf(pdfs.FindOriginal(caseId, number))
+        );
     }
 
-    private static IResult ReadDocument(
-        string caseId,
-        long reference,
-        CaseService service,
-        CaseFolders folders
-    )
-    {
-        var source = service
-            .ReadHistory(caseId)
-            ?.Select(revision => revision.Document)
-            .FirstOrDefault(document => document?.Reference == reference)
-            ?.Source;
-        return source is not null && folders.FindPdf(source) is string path
-            ? Results.File(path, "application/pdf", enableRangeProcessing: true)
-            : Results.NotFound();
-    }
-
-    private static IResult Found<T>(T? value)
-        where T : class => value is null ? Results.NotFound() : Json(value);
+    private static IResult Pdf(string? path) =>
+        path is null
+            ? Results.NotFound()
+            : Results.File(path, "application/pdf", enableRangeProcessing: true);
 
     private static IResult Json<T>(T value) => Results.Json(value, InvoiceJson.Options);
 }

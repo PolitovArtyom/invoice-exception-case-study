@@ -16,14 +16,20 @@ internal sealed class InvoiceCase
 
     public CaseMetadata Metadata => new(Id, Origin, AsOf, Sources.Items);
 
-    public static InvoiceCase FromMetadata(CaseMetadata metadata) =>
+    public static InvoiceCase FromMetadata(
+        CaseMetadata metadata,
+        IReadOnlyList<string>? referencePdfPaths = null
+    ) =>
         new()
         {
             Id = metadata.CaseId,
             Origin = metadata.Origin,
             AsOf = metadata.AsOf,
-            Sources = new(metadata.Sources),
+            Sources = new(metadata.Sources, referencePdfPaths),
         };
 }
 
-internal sealed record CaseSources(IReadOnlyList<InvoiceSource> Items);
+internal sealed record CaseSources(
+    IReadOnlyList<InvoiceSource> Items,
+    IReadOnlyList<string>? ReferencePdfPaths
+);

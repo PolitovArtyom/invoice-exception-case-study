@@ -92,9 +92,6 @@ internal static class CleanAssessment
         Assert.Equal("0.01", Text(price["expected"]!["inclusive_tolerance"]!, "value"));
         Assert.Equal("order", Text(price["expected"]!["unit_net_price"]!, "source"));
 
-        var conflict = checks.Single(check => Text(check!, "code") == "DOCUMENT_CONFLICT")!;
-        Assert.Empty(conflict["actual"]!["previous_invoice_matches"]!["value"]!.AsArray());
-
         AssertSources("ORDER_MATCH", "DOC-001", "order", checks, "order_id", "reference");
         AssertSources(
             "LINE_MATCH",

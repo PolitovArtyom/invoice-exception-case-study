@@ -23,6 +23,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CaseFolders>();
 builder.Services.AddScoped<CaseRepository>();
 builder.Services.AddScoped<CaseService>();
+builder.Services.AddScoped<CaseReader>();
+builder.Services.AddScoped<CasePdfs>();
 builder.Services.AddScoped<CaseLoader>();
 builder
     .Services.AddMcpServer()

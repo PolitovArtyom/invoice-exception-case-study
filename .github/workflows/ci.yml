@@ -81,8 +81,8 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install -r requirements.txt
-          .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001,case-002,case-003,case-004,case-005,case-007 --report-dir results/ci/public
-          jq -e '.summary | .cases_total == 6 and .cases_passed == 6 and .steps_total == 6 and .steps_passed == 6 and .adapter_failures == 0 and .critical_false_clear == 0' results/ci/public/eval-report.json
+          .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --cases case-001,case-002,case-003,case-004,case-005,case-006,case-007,case-008,case-009 --report-dir results/ci/public
+          jq -e '.summary | .cases_total == 9 and .cases_passed == 9 and .steps_total == 9 and .steps_passed == 9 and .adapter_failures == 0 and .critical_false_clear == 0' results/ci/public/eval-report.json
       - name: Upload public runner report
         if: always()
         uses: actions/upload-artifact@v6

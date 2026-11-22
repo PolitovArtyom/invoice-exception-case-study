@@ -1,6 +1,7 @@
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
-using InvoiceDesk.Core.Rules;
+using InvoiceDesk.Core.Rules.Duplicates;
 using InvoiceDesk.Core.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -23,24 +24,59 @@ public sealed class CaseRepository(InvoiceDatabase database)
                 row.CaseId == invoiceCase.Id && row.Number == invoiceCase.CurrentRevision
             );
 
-    internal (InvoiceCase Case, CaseRevision Revision)[] List() =>
-        (
-            from invoiceCase in database.Cases.AsNoTracking()
-            join revision in RevisionQuery
-                on new { CaseId = invoiceCase.Id, Number = invoiceCase.CurrentRevision } equals new
-                {
-                    revision.CaseId,
-                    revision.Number,
-                }
-            orderby invoiceCase.Id
-            select new { Case = invoiceCase, Revision = revision }
-        )
-            .AsEnumerable()
-            .Select(item => (item.Case, item.Revision))
+    internal (InvoiceCase Case, CaseRevision Revision, bool InputsChanged)[] List() =>
+        database
+            .Cases.AsNoTracking()
+            .OrderBy(invoiceCase => invoiceCase.Id)
+            .ToArray()
+            .Select(invoiceCase =>
+            {
+                var revision = ReadAssessmentOrLatestRevision(invoiceCase);
+                return (invoiceCase, revision, InputsChanged(invoiceCase, revision));
+            })
             .ToArray();
+
+    internal CompanyDataSnapshot ResolveSnapshot(string caseId, CompanyData companyData) =>
+        database.CompanyDataSnapshots.FirstOrDefault(row =>
+            row.CaseId == caseId && row.Data == companyData
+        ) ?? new CompanyDataSnapshot { CaseId = caseId, Data = companyData };
+
+    internal bool InputsChanged(InvoiceCase invoiceCase, CaseRevision assessed) =>
+        assessed.Number != invoiceCase.CurrentRevision
+        && database.Revisions.Any(row =>
+            row.CaseId == invoiceCase.Id
+            && row.Number == invoiceCase.CurrentRevision
+            && (row.SnapshotId != assessed.SnapshotId || row.DocumentId != assessed.DocumentId)
+        );
+
+    internal CaseRevision ReadAssessmentOrLatestRevision(InvoiceCase invoiceCase) =>
+        RevisionQuery
+            .Where(row => row.CaseId == invoiceCase.Id && row.Number <= invoiceCase.CurrentRevision)
+            .OrderByDescending(row => row.Result != null)
+            .ThenByDescending(row => row.Number)
+            .First();
 
     internal CaseRevision? ReadRevision(string caseId, int number) =>
         RevisionQuery.SingleOrDefault(row => row.CaseId == caseId && row.Number == number);
+
+    internal int? ReadLatestDuplicateRevision(
+        string caseId,
+        long documentId,
+        int currentRevision
+    ) =>
+        database
+            .Revisions.AsNoTracking()
+            .Where(row =>
+                row.CaseId == caseId
+                && row.DocumentId == documentId
+                && row.Number <= currentRevision
+                && row.DuplicateAttempt != null
+            )
+            .OrderByDescending(row => row.Number)
+            .Select(row => new { row.Number, row.OriginalInvoice })
+            .AsEnumerable()
+            .FirstOrDefault(row => row.OriginalInvoice?.DocumentReference == documentId)
+            ?.Number;
 
     internal CaseRevision[] ReadHistory(string caseId) =>
         RevisionQuery
@@ -48,24 +84,52 @@ public sealed class CaseRepository(InvoiceDatabase database)
             .OrderByDescending(row => row.Number)
             .ToArray();
 
-    internal EarlierImport[] ReadEarlierImports(string caseId, long? exceptDocumentId) =>
+    internal InvoiceSource? ReadDocumentSource(string caseId, long reference) =>
         database
-            .Revisions.AsNoTracking()
-            .Where(row =>
-                row.CaseId == caseId
-                && row.Document != null
-                && row.Document.ImportRevision == row.Number
-                && row.DocumentId != exceptDocumentId
-            )
-            .OrderBy(row => row.Number)
-            .Select(row => new EarlierImport(row.Document!.Facts, row.Snapshot.Data))
+            .Documents.AsNoTracking()
+            .Where(row => row.CaseId == caseId && row.Id == reference)
+            .Select(row => row.Source)
+            .SingleOrDefault();
+
+    internal EarlierImport[] ReadEarlierImports(string caseId) =>
+        (
+            from document in database.Documents.AsNoTracking()
+            where document.CaseId == caseId
+            orderby document.ImportRevision
+            let latestAssessment = database
+                .Revisions.Where(revision =>
+                    revision.DocumentId == document.Id && revision.Result != null
+                )
+                .Max(revision => (int?)revision.Number)
+            select new
+            {
+                document.Id,
+                document.Facts,
+                document.ContentSha256,
+                LatestAssessment = latestAssessment,
+            }
+        )
+            .AsEnumerable()
+            .Select(document => new EarlierImport(
+                new OriginalInvoice(
+                    document.Facts.DocumentId,
+                    document.ContentSha256,
+                    document.Id,
+                    document.LatestAssessment?.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture
+                    )
+                ),
+                document.Facts
+            ))
             .ToArray();
 
-    internal CaseRevision Append(
+    internal void Append(
         InvoiceCase invoiceCase,
         RevisionInputs inputs,
         InvoiceResult? result,
-        RevisionAction action
+        RevisionAction action,
+        OriginalInvoice? original,
+        DuplicateAttempt? duplicate
     )
     {
         if (database.Entry(invoiceCase).State == EntityState.Detached)
@@ -79,11 +143,12 @@ public sealed class CaseRepository(InvoiceDatabase database)
             Snapshot = inputs.Snapshot,
             Document = inputs.Document,
             Result = result,
+            OriginalInvoice = original,
+            DuplicateAttempt = duplicate,
         };
         database.Revisions.Add(revision);
         invoiceCase.CurrentRevision = inputs.Number;
         database.SaveChanges();
-        return revision;
     }
 
     private IQueryable<CaseRevision> RevisionQuery =>

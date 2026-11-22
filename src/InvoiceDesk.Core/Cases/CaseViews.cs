@@ -7,7 +7,9 @@ public sealed record CaseView(
     CaseMetadata Case,
     int CurrentRevision,
     CaseStage Stage,
-    RevisionView Revision
+    RevisionView Revision,
+    bool InputsChanged,
+    int? LatestDuplicateRevision
 );
 
 public sealed record RevisionView(
@@ -16,7 +18,9 @@ public sealed record RevisionView(
     RevisionAction Action,
     DocumentView? Document,
     string? AssessmentId,
-    InvoiceResult? Result
+    InvoiceResult? Result,
+    OriginalInvoice? OriginalInvoice,
+    DuplicateAttempt? DuplicateAttempt
 );
 
 public sealed record DocumentView(
@@ -35,11 +39,12 @@ public sealed record CaseSummary(
     decimal? DeclaredTotal,
     string? Currency,
     Decision? Decision,
-    CaseStage Stage
+    CaseStage Stage,
+    string? OriginalDocumentId
 );
 
 public sealed record AssessmentResponse(
-    string AssessmentId,
+    string? AssessmentId,
     InvoiceResult Result,
     bool InputsUnchanged
 );
@@ -49,4 +54,5 @@ public enum CaseStage
     NotRead,
     NeedsAttention,
     ReadyForAccounting,
+    Closed,
 }

@@ -13,10 +13,14 @@ public sealed class PublicReplayTests
     [InlineData("case-003", "blocked")]
     [InlineData("case-004", "needs_review")]
     [InlineData("case-005", "blocked")]
+    [InlineData("case-006", "blocked")]
     [InlineData("case-007", "blocked")]
+    [InlineData("case-008", null, "duplicate")]
+    [InlineData("case-009", "blocked", "conflict")]
     public void Should_return_the_published_outcome_when_public_steps_are_replayed(
         string caseId,
-        string decision
+        string? decision,
+        string disposition = "new"
     )
     {
         using var state = new TemporaryDirectory();
@@ -42,7 +46,7 @@ public sealed class PublicReplayTests
             );
         }
 
-        Assert.Equal((decision, "new"), Assert.Single(outcomes));
+        Assert.Equal((decision, disposition), Assert.Single(outcomes));
     }
 
     [Fact]
@@ -54,13 +58,40 @@ public sealed class PublicReplayTests
         AssertRejectedWithoutRevision(step);
     }
 
-    [Fact]
-    public void Should_fail_without_a_verdict_when_an_amount_exceeds_the_supported_limit()
+    [Theory]
+    [InlineData("invoice price")]
+    [InlineData("invoice quantity")]
+    [InlineData("invoice total")]
+    [InlineData("order price")]
+    [InlineData("receipt quantity")]
+    public void Should_fail_without_a_verdict_when_an_amount_exceeds_the_supported_limit(
+        string field
+    )
     {
         var step = PublicCases.ReadFirstStep();
-        step["document"]!["facts"]!["lines"]![0]!["unit_net_price"] = "1000000000.01";
+        switch (field)
+        {
+            case "invoice price":
+                step["document"]!["facts"]!["lines"]![0]!["unit_net_price"] = "1000000000.01";
+                break;
+            case "invoice quantity":
+                step["document"]!["facts"]!["lines"]![0]!["quantity"] = "1000000000.001";
+                break;
+            case "invoice total":
+                step["document"]!["facts"]!["declared_total"] = "79228162514264337593543950335.01";
+                break;
+            case "order price":
+                step["context"]!["purchase_orders"]!["orders"]![0]!["lines"]![0]![
+                    "unit_net_price"
+                ] = "1000000000.01";
+                break;
+            case "receipt quantity":
+                step["context"]!["goods_receipts"]!["receipts"]![0]!["accepted_quantity"] =
+                    "1000000000.001";
+                break;
+        }
 
-        AssertRejectedWithoutRevision(step);
+        AssertRejectedWithoutRevision(step, rejectedBeforeOpeningState: true);
     }
 
     [Fact]
@@ -107,7 +138,10 @@ public sealed class PublicReplayTests
         );
     }
 
-    private static void AssertRejectedWithoutRevision(JsonObject step)
+    private static void AssertRejectedWithoutRevision(
+        JsonObject step,
+        bool rejectedBeforeOpeningState = false
+    )
     {
         using var state = new TemporaryDirectory();
         using var input = new StringReader(step.ToJsonString());
@@ -115,6 +149,8 @@ public sealed class PublicReplayTests
 
         Assert.Equal(1, RunnerAdapter.Run(input, stdout, state.Path));
         Assert.Equal("", stdout.ToString());
+        if (rejectedBeforeOpeningState)
+            Assert.Empty(Directory.GetFiles(state.Path));
 
         using var supported = File.OpenText(PublicCases.Steps(PublicCases.CleanCase).Single());
         Assert.Equal(0, RunnerAdapter.Run(supported, stdout, state.Path));

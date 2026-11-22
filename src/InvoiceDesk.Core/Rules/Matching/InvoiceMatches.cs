@@ -60,8 +60,13 @@ internal static class InvoiceMatches
         party.RegistrationId is not null
             ? InvoiceText.Identifier(party.RegistrationId)
                 == InvoiceText.Identifier(buyer.RegistrationId)
-            : InvoiceText.SameName(party.LegalName, buyer.LegalName)
-                || buyer.ExplicitAliases.Any(alias => InvoiceText.SameName(party.LegalName, alias));
+            : party.LegalName is not null
+                && (
+                    InvoiceText.SameName(party.LegalName, buyer.LegalName)
+                    || buyer.ExplicitAliases.Any(alias =>
+                        InvoiceText.SameName(party.LegalName, alias)
+                    )
+                );
 
     private static LineMatchReason? MatchReason(InvoiceLine line, PurchaseOrderLine candidate)
     {

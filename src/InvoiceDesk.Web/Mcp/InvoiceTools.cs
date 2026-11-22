@@ -15,6 +15,7 @@ namespace InvoiceDesk.Web.Mcp;
 [McpServerToolType]
 public sealed class InvoiceTools(
     CaseService cases,
+    CaseReader reader,
     CaseFolders folders,
     ILogger<InvoiceTools> logger
 )
@@ -69,7 +70,7 @@ public sealed class InvoiceTools(
         Description("Read the case's saved company data snapshot.")
     ]
     public CallToolResult GetCompanyData(string case_id) =>
-        ToolResponse.Run(() => cases.ReadCompanyData(case_id) ?? throw UnknownCase(), logger);
+        ToolResponse.Run(() => reader.ReadCompanyData(case_id) ?? throw UnknownCase(), logger);
 
     [
         McpServerTool(Name = "register_invoice"),
@@ -102,10 +103,11 @@ public sealed class InvoiceTools(
                     new InvoiceReading(reading, pdf.ContentSha256, pdf, ReadingOrigin.Agent)
                 );
                 logger.LogInformation(
-                    "Registered invoice document {DocumentId} for case {CaseId} at revision {Revision}",
+                    "Processed invoice document {DocumentId} for case {CaseId} at revision {Revision} with disposition {Disposition}",
                     reading.DocumentId,
                     case_id,
-                    assessment.Result.InputRevision
+                    assessment.Result.InputRevision,
+                    assessment.Result.ImportDisposition
                 );
                 return assessment;
             },
@@ -117,7 +119,7 @@ public sealed class InvoiceTools(
         Description("Return the saved assessment for the case's unchanged inputs.")
     ]
     public CallToolResult AssessInvoice(string case_id) =>
-        ToolResponse.Run(() => cases.AssessInvoice(case_id), logger);
+        ToolResponse.Run(() => reader.AssessInvoice(case_id), logger);
 
     [
         McpServerTool(Name = "get_assessment"),
@@ -147,15 +149,15 @@ public sealed class InvoiceTools(
         Description("Read the case's revisions from newest to oldest.")
     ]
     public CallToolResult GetCaseHistory(string case_id) =>
-        ToolResponse.Run(() => cases.ReadHistory(case_id) ?? throw UnknownCase(), logger);
+        ToolResponse.Run(() => reader.ReadHistory(case_id) ?? throw UnknownCase(), logger);
 
     private CaseView? ReadAssessment(string caseId, string assessmentId) =>
         int.TryParse(assessmentId, NumberStyles.None, CultureInfo.InvariantCulture, out int number)
         && number.ToString(CultureInfo.InvariantCulture) == assessmentId
-            ? cases.ReadAssessment(caseId, number)
+            ? reader.ReadAssessment(caseId, number)
             : null;
 
-    private CaseView RequireCase(string caseId) => cases.Read(caseId) ?? throw UnknownCase();
+    private CaseView RequireCase(string caseId) => reader.Read(caseId) ?? throw UnknownCase();
 
     private static SourceRoot ReadSourceRoot(string root) =>
         root switch

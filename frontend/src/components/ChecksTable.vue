@@ -62,7 +62,14 @@ const visibleChecks = computed(() =>
             <td class="mono">{{ check.object_id }}</td>
             <td><CheckVerdict :check="check" /></td>
             <td>
-              <details v-if="check.actual && check.expected">
+              <a
+                v-if="
+                  check.code === 'DOCUMENT_CONFLICT' && check.status === 'fail'
+                "
+                href="#conflict-differences"
+                >View differences</a
+              >
+              <details v-else-if="check.actual && check.expected">
                 <summary>View operands</summary>
                 <p class="comparison-label">Actual</p>
                 <CheckOperands :operands="actualOperands(facts, check)" />

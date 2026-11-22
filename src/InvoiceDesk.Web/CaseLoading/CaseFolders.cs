@@ -27,6 +27,25 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
     public string? FindPdf(InvoiceSource source) =>
         FindFile(GetRoot(source.Root), source.RelativePath);
 
+    public string? FindReferencePdf(
+        CaseOrigin origin,
+        IReadOnlyList<string> referencePdfPaths,
+        string sha256
+    )
+    {
+        var root = origin == CaseOrigin.Assignment ? SourceRoot.Public : SourceRoot.Own;
+        foreach (string relativePath in referencePdfPaths)
+        {
+            if (FindFile(GetRoot(root), relativePath) is not { } path)
+                continue;
+
+            if (HashMatches(path, sha256))
+                return path;
+        }
+
+        return null;
+    }
+
     public static string HostPath(InvoiceSource source) =>
         (source.Root == SourceRoot.Public ? "dataset/" : "scenarios/") + source.RelativePath;
 
@@ -60,6 +79,12 @@ public sealed class CaseFolders(IConfiguration configuration, IWebHostEnvironmen
     {
         string path = Path.Combine(directory, relativePath);
         return File.Exists(path) ? path : null;
+    }
+
+    private static bool HashMatches(string path, string expected)
+    {
+        using var pdf = File.OpenRead(path);
+        return Convert.ToHexStringLower(SHA256.HashData(pdf)) == expected;
     }
 
     private string GetRoot(SourceRoot root) =>

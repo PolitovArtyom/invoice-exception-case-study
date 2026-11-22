@@ -32,12 +32,14 @@ internal static class AssessmentAssertions
         ExpectedCheck[] exceptions,
         (string Fact, string ObjectId)[]? questions = null,
         string? matchedOrderId = "O",
-        string? orderMatchSource = "deterministic"
+        string? orderMatchSource = "deterministic",
+        string disposition = "new",
+        string? originalDocumentId = null
     )
     {
         AssignmentSchemas.Instance.Validate("step-output", result);
-        Assert.Equal("new", Text(result, "import_disposition"));
-        Assert.Null(result["original_document_id"]);
+        Assert.Equal(disposition, Text(result, "import_disposition"));
+        Assert.Equal(originalDocumentId, Text(result, "original_document_id"));
         Assert.Null(result["existing_assessment_ref"]);
         Assert.Equal(documentId, Text(result, "document_id"));
         Assert.Equal(decision, Text(result, "decision"));

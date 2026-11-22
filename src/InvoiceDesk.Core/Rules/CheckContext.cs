@@ -16,8 +16,7 @@ internal sealed record CheckContext(
     PurchaseOrder? Order,
     MatchedLine[] Lines,
     InvoiceBusinessKey? BusinessKey,
-    IReadOnlyList<PreviousInvoice> PreviousInvoices,
-    IReadOnlyList<EarlierImport> EarlierImports,
+    InvoiceImportMatch? ConflictingInvoice,
     InvoiceTotals Totals
 );
 

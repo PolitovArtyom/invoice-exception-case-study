@@ -31,6 +31,12 @@ namespace InvoiceDesk.Core.Storage.Migrations
                     b.Property<long?>("DocumentId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("DuplicateAttempt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OriginalInvoice")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Result")
                         .HasColumnType("TEXT");
 

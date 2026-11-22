@@ -24,7 +24,13 @@ function display(operand: PresentedOperand | undefined): string {
 <template>
   <dl class="operands">
     <div v-for="(operand, name) in operands" :key="name">
-      <dt>{{ name.replaceAll('_', ' ') }}</dt>
+      <dt>
+        {{
+          name === 'matching_registration_id'
+            ? 'Registered ID'
+            : name.replaceAll('_', ' ')
+        }}
+      </dt>
       <dd>
         <span class="mono">{{ display(operand) }}</span>
         <SourceTag v-if="operand" :source="operand.source" />

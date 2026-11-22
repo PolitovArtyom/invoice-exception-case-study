@@ -5,7 +5,12 @@ using InvoiceDesk.Core.Validation;
 
 namespace InvoiceDesk.Web.CaseLoading;
 
-public sealed class CaseLoader(CaseFolders folders, CaseService cases, ILogger<CaseLoader> logger)
+public sealed class CaseLoader(
+    CaseFolders folders,
+    CaseService cases,
+    CaseReader reader,
+    ILogger<CaseLoader> logger
+)
 {
     private static readonly HashSet<string> FixtureFacts =
     [
@@ -13,7 +18,10 @@ public sealed class CaseLoader(CaseFolders folders, CaseService cases, ILogger<C
         "case-002",
         "case-003",
         "case-005",
+        "case-006",
         "case-007",
+        "case-008",
+        "case-009",
     ];
 
     public void Load()
@@ -87,10 +95,20 @@ public sealed class CaseLoader(CaseFolders folders, CaseService cases, ILogger<C
             )
             : null;
 
-        if (cases.Exists(folderName))
+        if (reader.Exists(folderName))
             return;
 
-        if (cases.LoadCase(metadata, companyData, reading))
+        var referencePdfPaths = (input.Fixtures ?? [])
+            .Where(fixture =>
+                string.Equals(
+                    Path.GetExtension(fixture.Path),
+                    ".pdf",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            .Select(fixture => $"cases/{folderName}/{fixture.Path}")
+            .ToArray();
+        if (cases.LoadCase(metadata, companyData, reading, referencePdfPaths))
             logger.LogInformation(
                 "Loaded case {CaseId} with snapshot {ContextVersion} and fixture facts {HasFacts}",
                 metadata.CaseId,
@@ -127,10 +145,13 @@ public sealed class CaseLoader(CaseFolders folders, CaseService cases, ILogger<C
         string CaseId,
         DateOnly AsOf,
         ManifestDocument[] InputDocuments,
-        ManifestStep[] Steps
+        ManifestStep[] Steps,
+        ManifestFixture[]? Fixtures
     );
 
     private sealed record ManifestDocument(string DocumentId, string Path, string ContentSha256);
 
     private sealed record ManifestStep(string Input);
+
+    private sealed record ManifestFixture(string Path);
 }

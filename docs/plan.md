@@ -11,6 +11,6 @@
 | 06 Human resolution | Acceptance, reading correction and scenario 102. | All ten |
 | 07 Final delivery | Clean-clone verification, rule-change rehearsal and submission. | All ten |
 
-Stage 01 delivers quantity, pricing, arithmetic and bank assessments for matched invoices and displays their saved operands and verdicts. The MCP API tests cover missing facts, price tolerance, rounding, exact totals, signed balances and the case 004 and 005 regressions. The official runner gates cases 001, 002, 003, 004, 005 and 007. Cases outside the startup allow-list begin with company data and source metadata. Supplier-issued corrected invoice scenario 103 is part of the simulated prototype.
+Stage 02 delivers party and currency checks, field-specific fact validation, duplicate history and conflict assessments. The page shows original-versus-current differences and PDF evidence and closes cases that contain only a resend. API tests exercise directory resolution, normalized re-imports, exact duplicate responses, validation without writes, and restart persistence. The official runner gates cases 001–009. The startup allow-list includes 001–003 and 005–009. Proposal-based resolution starts in stage 03. Supplier-issued corrected invoice scenario 103 remains part of the simulated prototype.
 
 Every stage builds and runs the accumulated API and runner gates. GitHub Actions retains the public runner report. Workspace QA and reviews precede integration.

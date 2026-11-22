@@ -2,6 +2,8 @@ using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules;
+using InvoiceDesk.Core.Rules.Duplicates;
+using InvoiceDesk.Core.Rules.Parties;
 using InvoiceDesk.Core.Storage;
 using InvoiceDesk.Core.Validation;
 
@@ -13,13 +15,18 @@ public sealed class CaseService(
     TimeProvider clock
 )
 {
-    public bool LoadCase(CaseMetadata metadata, CompanyData companyData, InvoiceReading? fixture)
+    public bool LoadCase(
+        CaseMetadata metadata,
+        CompanyData companyData,
+        InvoiceReading? fixture,
+        IReadOnlyList<string>? referencePdfPaths = null
+    )
     {
         using var transaction = repository.BeginUpdate();
         if (repository.FindForUpdate(metadata.CaseId) is not null)
             return false;
 
-        var invoiceCase = InvoiceCase.FromMetadata(metadata);
+        var invoiceCase = InvoiceCase.FromMetadata(metadata, referencePdfPaths);
         Apply(
             invoiceCase,
             null,
@@ -39,7 +46,7 @@ public sealed class CaseService(
         var invoiceCase = repository.FindForUpdate(caseId)
             ?? throw new InvoiceValidationException("/case_id", "Case does not exist.");
         var current = repository.FindCurrentRevisionForUpdate(invoiceCase);
-        var revision = Apply(
+        var result = Apply(
             invoiceCase,
             current,
             null,
@@ -49,7 +56,7 @@ public sealed class CaseService(
             RevisionActor.Agent
         );
         transaction.Commit();
-        return Response(revision.Number, revision.Result!, false);
+        return Response(result!, false);
     }
 
     public InvoiceResult SubmitCaseInputs(
@@ -76,7 +83,7 @@ public sealed class CaseService(
             );
 
         invoiceCase ??= InvoiceCase.FromMetadata(metadata);
-        var revision = Apply(
+        var result = Apply(
             invoiceCase,
             current,
             companyData,
@@ -86,124 +93,10 @@ public sealed class CaseService(
             RevisionActor.Runner
         );
         transaction.Commit();
-        return revision.Result!;
+        return result!;
     }
 
-    public AssessmentResponse AssessInvoice(string caseId)
-    {
-        var invoiceCase = repository.Find(caseId)
-            ?? throw new InvoiceValidationException("/case_id", "Case does not exist.");
-        var latest = repository.ReadRevision(caseId, invoiceCase.CurrentRevision)!;
-        if (latest.Result is null)
-            throw new InvoiceValidationException(
-                "/case_id",
-                "Register invoice facts before requesting an assessment."
-            );
-
-        return Response(latest.Number, latest.Result, true);
-    }
-
-    public CaseSummary[] List() =>
-        repository.List().Select(item => Summarize(item.Case, item.Revision)).ToArray();
-
-    public CaseView? Read(string caseId)
-    {
-        var invoiceCase = repository.Find(caseId);
-        if (invoiceCase is null)
-            return null;
-
-        var revision = repository.ReadRevision(caseId, invoiceCase.CurrentRevision)!;
-        return new(
-            invoiceCase.Metadata,
-            invoiceCase.CurrentRevision,
-            Stage(revision),
-            View(revision)
-        );
-    }
-
-    public CaseView? ReadAssessment(string caseId, int revisionNumber)
-    {
-        var invoiceCase = repository.Find(caseId);
-        if (invoiceCase is null)
-            return null;
-
-        var revision = repository.ReadRevision(caseId, revisionNumber);
-        return revision?.Result is null
-            ? null
-            : new(
-                invoiceCase.Metadata,
-                invoiceCase.CurrentRevision,
-                Stage(revision),
-                View(revision)
-            );
-    }
-
-    public RevisionView[]? ReadHistory(string caseId) =>
-        repository.Find(caseId) is null
-            ? null
-            : repository.ReadHistory(caseId).Select(View).ToArray();
-
-    public CompanyData? ReadCompanyData(string caseId)
-    {
-        var invoiceCase = repository.Find(caseId);
-        return invoiceCase is null
-            ? null
-            : repository.ReadRevision(caseId, invoiceCase.CurrentRevision)?.Snapshot.Data;
-    }
-
-    public bool Exists(string caseId) => repository.Find(caseId) is not null;
-
-    private static string AssessmentId(int revision) =>
-        revision.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-    private static RevisionView View(CaseRevision revision)
-    {
-        var document = revision.Document;
-        return new(
-            revision.Number,
-            revision.Snapshot.Data.ContextVersion,
-            revision.Action,
-            document is null
-                ? null
-                : new(
-                    document.Id,
-                    document.ContentSha256,
-                    document.Source,
-                    document.Facts,
-                    document.ReadingOrigin
-                ),
-            revision.Result is null ? null : AssessmentId(revision.Number),
-            revision.Result
-        );
-    }
-
-    private static CaseSummary Summarize(InvoiceCase invoiceCase, CaseRevision revision)
-    {
-        var facts = revision.Document?.Facts;
-        Decision? decision = revision.Result?.Decision;
-        return new(
-            invoiceCase.Id,
-            invoiceCase.Origin,
-            facts?.Number,
-            facts?.Supplier.LegalName,
-            facts?.DeclaredTotal,
-            facts?.Currency,
-            decision,
-            Stage(revision)
-        );
-    }
-
-    private static CaseStage Stage(CaseRevision revision)
-    {
-        if (revision.Document is null)
-            return CaseStage.NotRead;
-
-        return revision.Result?.Decision == Decision.Clear
-            ? CaseStage.ReadyForAccounting
-            : CaseStage.NeedsAttention;
-    }
-
-    private CaseRevision Apply(
+    private InvoiceResult? Apply(
         InvoiceCase invoiceCase,
         CaseRevision? current,
         CompanyData? companyData,
@@ -214,19 +107,54 @@ public sealed class CaseService(
     )
     {
         var inputs = ResolveInputs(invoiceCase, current, companyData, reading);
-        var result = inputs.Facts is null
-            ? null
-            : evaluator.Evaluate(
+        InvoiceResult? result = null;
+        InvoiceImportMatch? importMatch = null;
+        if (inputs.Document is { } document)
+        {
+            var parties = InvoiceParties.Resolve(document.Facts, inputs.CompanyData);
+            importMatch = ClassifyImport(document, inputs.CompanyData, parties, reading is null);
+            result = evaluator.Evaluate(
                 invoiceCase.Id,
                 step ?? inputs.Number,
                 inputs,
-                repository.ReadEarlierImports(invoiceCase.Id, inputs.Document?.Id)
+                parties,
+                importMatch
             );
+        }
 
-        return repository.Append(invoiceCase, inputs, result, new(kind, actor, clock.GetUtcNow()));
+        bool isDuplicate = result?.ImportDisposition == ImportDisposition.Duplicate;
+        var duplicate = isDuplicate && reading is not null ? new DuplicateAttempt(reading) : null;
+        repository.Append(
+            invoiceCase,
+            isDuplicate ? inputs with { Document = current?.Document } : inputs,
+            isDuplicate ? null : result,
+            new(kind, actor, clock.GetUtcNow()),
+            importMatch?.Original,
+            duplicate
+        );
+        return result;
     }
 
-    private static RevisionInputs ResolveInputs(
+    private InvoiceImportMatch? ClassifyImport(
+        InvoiceDocument document,
+        CompanyData companyData,
+        InvoiceParties parties,
+        bool isReassessment
+    )
+    {
+        if (parties.Key is not { } key)
+            return null;
+
+        return InvoiceImportMatch.Find(
+            document.Facts,
+            key,
+            companyData,
+            repository.ReadEarlierImports(document.CaseId),
+            isReassessment ? document.ContentSha256 : null
+        );
+    }
+
+    private RevisionInputs ResolveInputs(
         InvoiceCase invoiceCase,
         CaseRevision? current,
         CompanyData? companyData,
@@ -236,7 +164,7 @@ public sealed class CaseService(
         int number = invoiceCase.CurrentRevision + 1;
         var snapshot = companyData is null
             ? current!.Snapshot
-            : new CompanyDataSnapshot { CaseId = invoiceCase.Id, Data = companyData };
+            : repository.ResolveSnapshot(invoiceCase.Id, companyData);
         var document = reading is null
             ? current?.Document
             : new InvoiceDocument
@@ -251,9 +179,12 @@ public sealed class CaseService(
         return new(number, snapshot, document);
     }
 
-    private static AssessmentResponse Response(
-        int revision,
-        InvoiceResult result,
-        bool unchanged
-    ) => new(AssessmentId(revision), result, unchanged);
+    private static AssessmentResponse Response(InvoiceResult result, bool unchanged) =>
+        new(
+            result.Decision is null
+                ? null
+                : result.InputRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            result,
+            unchanged
+        );
 }
