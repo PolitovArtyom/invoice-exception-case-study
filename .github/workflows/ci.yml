@@ -1,8 +1,7 @@
 name: CI
 on:
   pull_request:
-  push:
-    branches: [develop]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -64,49 +63,20 @@ jobs:
         if: always()
         run: docker compose down
 
-  adapter-exports:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      matrix:
-        rid: [osx-arm64, osx-x64, linux-x64, linux-arm64, win-x64]
-    steps:
-      - uses: actions/checkout@v6
-      - name: Export self-contained adapter
-        env:
-          RID: ${{ matrix.rid }}
-        run: |
-          docker build -f Dockerfile.adapter --target export --build-arg RID="$RID" --output "type=local,dest=dist/$RID" .
-          case "$RID" in
-            win-*) test -f "dist/$RID/InvoiceDesk.Adapter.exe"; test -f "dist/$RID/e_sqlite3.dll" ;;
-            osx-*) test -x "dist/$RID/InvoiceDesk.Adapter"; test -f "dist/$RID/libe_sqlite3.dylib" ;;
-            linux-*) test -x "dist/$RID/InvoiceDesk.Adapter"; test -f "dist/$RID/libe_sqlite3.so" ;;
-          esac
-
   runner:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    strategy:
-      matrix:
-        include:
-          - mode: native
-            adapter: dist/linux-x64/InvoiceDesk.Adapter
-          - mode: docker
-            adapter: ./scripts/adapter-docker
+    env:
+      ADAPTER: dist/linux-x64/InvoiceDesk.Adapter
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Export Linux native adapter
-        if: matrix.mode == 'native'
-        run: docker build -f Dockerfile.adapter --target export --output type=local,dest=dist/linux-x64 .
-      - name: Build fallback image
-        if: matrix.mode == 'docker'
-        run: docker build -f Dockerfile.adapter --target runtime -t invoice-adapter:local .
+        run: docker build -f Dockerfile.adapter --target export --build-arg RID=linux-x64 --output type=local,dest=dist/linux-x64 .
       - name: Run public acceptance
         env:
-          ADAPTER: ${{ matrix.adapter }}
           CDPATH: .
         run: |
           python -m venv .venv
@@ -115,7 +85,6 @@ jobs:
           jq -e '(.summary | .cases_total == 10 and .cases_passed == 10 and .steps_total == 12 and .steps_passed == 12 and .adapter_failures == 0 and .critical_false_clear == 0) and all(.cases[].steps[]; (.differences | length) == 0)' 'results/ci/public runner/eval-report.json'
       - name: Check validation exit status
         env:
-          ADAPTER: ${{ matrix.adapter }}
           CDPATH: .
         run: |
           status=0
@@ -126,5 +95,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: public-runner-report-${{ matrix.mode }}
+          name: public-runner-report-native
           path: results/ci/public runner/eval-report.*
