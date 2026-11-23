@@ -9,8 +9,8 @@ import {
   type ProposalView,
 } from '../api'
 import { checkTitle } from '../checkPresentation'
-import { formatDecimal } from '../formatDecimal'
 import DecisionTag from './DecisionTag.vue'
+import ProposalLineMapping from './ProposalLineMapping.vue'
 
 const props = defineProps<{ view: CaseView; facts: InvoiceFacts }>()
 const emit = defineEmits<{ refresh: [message?: string] }>()
@@ -64,18 +64,6 @@ watch(
   { immediate: true },
 )
 
-const mapping = computed(
-  () =>
-    selected.value?.registration.proposal.line_matches.map((link) => ({
-      link,
-      invoice: props.facts.lines.find(
-        (line) => line.line_id === link.document_line_id,
-      ),
-      order: selected.value?.order?.lines.find(
-        (line) => line.line_id === link.order_line_id,
-      ),
-    })) ?? [],
-)
 const automatic = computed(() => {
   const result = preview.value?.result ?? props.view.revision.result
   if (!result || result.matched_order_id !== selected.value?.order?.order_id)
@@ -195,28 +183,14 @@ async function confirm() {
         </dd>
       </div>
     </dl>
-    <div
-      v-for="{ link, invoice, order } in mapping"
+    <ProposalLineMapping
+      v-for="link in selected.registration.proposal.line_matches"
       :key="link.document_line_id"
-      class="proposal-mapping"
-    >
-      <div>
-        <strong>Invoice line {{ link.document_line_id }}</strong>
-        <p v-if="invoice">
-          {{ invoice.description }} · {{ formatDecimal(invoice.quantity) }}
-          {{ invoice.unit }} × {{ formatDecimal(invoice.unit_net_price) }}
-          {{ facts.currency }}
-        </p>
-      </div>
-      <div>
-        <strong>Order line {{ link.order_line_id }}</strong>
-        <p v-if="order">
-          {{ order.description }} · {{ formatDecimal(order.quantity) }}
-          {{ order.unit }} × {{ formatDecimal(order.unit_net_price) }}
-          {{ selected.order?.currency }}
-        </p>
-      </div>
-    </div>
+      :link="link"
+      :facts="facts"
+      :order="selected.order"
+      :receipt-directory="view.company_data.goods_receipts"
+    />
     <p v-if="automatic.length" class="muted">
       Matched automatically —
       {{

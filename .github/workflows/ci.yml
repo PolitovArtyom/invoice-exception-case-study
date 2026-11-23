@@ -64,28 +64,67 @@ jobs:
         if: always()
         run: docker compose down
 
+  adapter-exports:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        rid: [osx-arm64, osx-x64, linux-x64, linux-arm64, win-x64]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Export self-contained adapter
+        env:
+          RID: ${{ matrix.rid }}
+        run: |
+          docker build -f Dockerfile.adapter --target export --build-arg RID="$RID" --output "type=local,dest=dist/$RID" .
+          case "$RID" in
+            win-*) test -f "dist/$RID/InvoiceDesk.Adapter.exe"; test -f "dist/$RID/e_sqlite3.dll" ;;
+            osx-*) test -x "dist/$RID/InvoiceDesk.Adapter"; test -f "dist/$RID/libe_sqlite3.dylib" ;;
+            linux-*) test -x "dist/$RID/InvoiceDesk.Adapter"; test -f "dist/$RID/libe_sqlite3.so" ;;
+          esac
+
   runner:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      matrix:
+        include:
+          - mode: native
+            adapter: dist/linux-x64/InvoiceDesk.Adapter
+          - mode: docker
+            adapter: ./scripts/adapter-docker
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Publish native adapter
-        run: dotnet publish src/InvoiceDesk.Adapter -c Release --self-contained false -o dist/native
+      - name: Export Linux native adapter
+        if: matrix.mode == 'native'
+        run: docker build -f Dockerfile.adapter --target export --output type=local,dest=dist/linux-x64 .
+      - name: Build fallback image
+        if: matrix.mode == 'docker'
+        run: docker build -f Dockerfile.adapter --target runtime -t invoice-adapter:local .
       - name: Run public acceptance
+        env:
+          ADAPTER: ${{ matrix.adapter }}
+          CDPATH: .
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install -r requirements.txt
-          .venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --report-dir results/ci/public
-          jq -e '(.summary | .cases_total == 10 and .cases_passed == 10 and .steps_total == 12 and .steps_passed == 12 and .adapter_failures == 0 and .critical_false_clear == 0) and all(.cases[].steps[]; (.differences | length) == 0)' results/ci/public/eval-report.json
+          .venv/bin/python tools/run_evals.py --adapter "$ADAPTER" --report-dir 'results/ci/public runner'
+          jq -e '(.summary | .cases_total == 10 and .cases_passed == 10 and .steps_total == 12 and .steps_passed == 12 and .adapter_failures == 0 and .critical_false_clear == 0) and all(.cases[].steps[]; (.differences | length) == 0)' 'results/ci/public runner/eval-report.json'
+      - name: Check validation exit status
+        env:
+          ADAPTER: ${{ matrix.adapter }}
+          CDPATH: .
+        run: |
+          status=0
+          "$ADAPTER" --state-dir 'results/ci/validation, state' <<< '{}' > results/ci/validation.json || status=$?
+          test "$status" -eq 2
+          jq -e '.error.code == "VALIDATION_ERROR"' results/ci/validation.json
       - name: Upload public runner report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: public-runner-report
-          path: results/ci/public/eval-report.*
+          name: public-runner-report-${{ matrix.mode }}
+          path: results/ci/public runner/eval-report.*

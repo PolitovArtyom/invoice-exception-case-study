@@ -30,7 +30,7 @@ builder.Services.AddScoped<InvoiceRecheck>();
 builder
     .Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
-    .WithTools<InvoiceTools>();
+    .WithTools(InvoiceTools.CreateTools());
 
 var app = builder.Build();
 

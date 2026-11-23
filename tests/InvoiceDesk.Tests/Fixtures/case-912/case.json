@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "case_id": "case-912",
+  "policy_ref": "core-v1",
+  "as_of": "2026-11-02",
+  "input_documents": [
+    {
+      "document_id": "DOC-912",
+      "path": "documents/document-001.pdf",
+      "content_sha256": "9068ed9bababf32e4a4c5336485e3a2695d73f23643f92b751e434313d86223b"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "input": "steps/step-001.json",
+      "expected": "expected/step-001.json"
+    }
+  ]
+}

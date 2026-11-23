@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -21,6 +22,30 @@ public sealed class InvoiceTools(
     ILogger<InvoiceTools> logger
 )
 {
+    internal static IEnumerable<McpServerTool> CreateTools()
+    {
+        var options = new McpServerToolCreateOptions
+        {
+            SchemaCreateOptions = new()
+            {
+                TransformSchemaNode = (context, schema) =>
+                    context.TypeInfo.Type == typeof(JsonElement)
+                        ? new JsonObject { ["type"] = "object" }
+                        : schema,
+            },
+        };
+        return typeof(InvoiceTools)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(method => method.IsDefined(typeof(McpServerToolAttribute)))
+            .Select(method =>
+                McpServerTool.Create(
+                    method,
+                    context => ActivatorUtilities.CreateInstance<InvoiceTools>(context.Services!),
+                    options
+                )
+            );
+    }
+
     [
         McpServerTool(Name = "open_case"),
         Description(

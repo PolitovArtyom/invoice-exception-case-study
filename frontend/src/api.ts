@@ -150,6 +150,7 @@ export interface CaseView {
   current_revision: number
   original_pdf_available: boolean
   invoice_pdf_available: boolean
+  source_pdfs: { index: number; document_id: string }[]
   inputs_changed: boolean
   latest_duplicate_revision: number | null
   superseded: boolean
@@ -157,7 +158,9 @@ export interface CaseView {
   effective_proposal_id: string | null
   proposals: ProposalView[]
   open_supplier_orders: PurchaseOrder[]
-  company_data: Record<string, unknown>
+  company_data: {
+    goods_receipts: ReceiptDirectory
+  }
   issues: CaseIssue[]
   stage: CaseStage
   revision: RevisionView
@@ -202,7 +205,22 @@ export interface RevisionView {
   } | null
 }
 
-interface PurchaseOrder {
+export interface ReceiptDirectory {
+  availability: 'available' | 'unavailable'
+  receipts: GoodsReceipt[]
+}
+
+interface GoodsReceipt {
+  receipt_id: string
+  order_id: string
+  order_line_id: string
+  accepted_quantity: string
+  unit: string
+  accepted_at: string
+  status: 'accepted'
+}
+
+export interface PurchaseOrder {
   order_id: string
   reference: string
   supplier_id: string
@@ -217,13 +235,18 @@ interface PurchaseOrder {
   }[]
 }
 
+export interface ProposalLineMatch {
+  document_line_id: string
+  order_line_id: string
+}
+
 export interface ProposalView {
   registration: {
     proposal: {
       proposal_id: string
       document_id: string
       order_id: string
-      line_matches: { document_line_id: string; order_line_id: string }[]
+      line_matches: ProposalLineMatch[]
     }
     confirmation: { confirmed_by: string } | null
   }
@@ -302,6 +325,10 @@ export async function confirmProposal(
       supporting_documents_reviewed: reviewed,
     }),
   })
+}
+
+export function sourcePdf(caseId: string, index: number) {
+  return `/api/cases/${encodeURIComponent(caseId)}/sources/${index}/pdf`
 }
 
 export function documentPdf(caseId: string, reference: number) {

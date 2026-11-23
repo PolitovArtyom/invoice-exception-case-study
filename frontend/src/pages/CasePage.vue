@@ -6,6 +6,7 @@ import {
   getCase,
   getHistory,
   revisionPdf,
+  sourcePdf,
   type CaseView,
   type ReadingOrigin,
   type RevisionView,
@@ -213,7 +214,18 @@ watch(
         <a v-if="pdf" :href="pdf" target="_blank" rel="noopener"
           >Open invoice PDF ↗</a
         >
-        <span v-else-if="facts" class="muted">Invoice PDF unavailable</span>
+        <template v-else-if="!facts">
+          <a
+            v-for="source in view.source_pdfs"
+            :key="source.index"
+            :href="sourcePdf(caseId, source.index)"
+            target="_blank"
+            rel="noopener"
+            >Open invoice PDF
+            {{ view.source_pdfs.length > 1 ? source.document_id : '' }} ↗</a
+          >
+        </template>
+        <span v-else class="muted">Invoice PDF unavailable</span>
       </div>
     </section>
     <section

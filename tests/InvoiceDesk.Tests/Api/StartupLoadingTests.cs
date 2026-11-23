@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json.Nodes;
 using InvoiceDesk.Tests.Support;
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
@@ -111,6 +112,15 @@ public sealed class StartupLoadingTests
         Assert.Equal(1, pending["current_revision"]!.GetValue<int>());
         Assert.Null(pending["revision"]!["document"]);
         Assert.Null(pending["revision"]!["result"]);
+        var sourcePdf = Assert.Single(pending["source_pdfs"]!.AsArray())!;
+        Assert.Equal(0, sourcePdf["index"]!.GetValue<int>());
+        Assert.Equal("DOC-001", sourcePdf["document_id"]!.GetValue<string>());
+        using var pdf = await page.GetAsync("/api/cases/case-911/sources/0/pdf");
+        Assert.Equal(HttpStatusCode.OK, pdf.StatusCode);
+        Assert.Equal("application/pdf", pdf.Content.Headers.ContentType?.MediaType);
+        using var missingPdf = await page.GetAsync("/api/cases/case-911/sources/1/pdf");
+        Assert.Equal(HttpStatusCode.NotFound, missingPdf.StatusCode);
+
         var opened = Payload(await Call(mcp, "open_case", "case-911"));
         Assert.Null(opened["current_document_id"]);
         var source = Assert.Single(opened["sources"]!.AsArray())!;

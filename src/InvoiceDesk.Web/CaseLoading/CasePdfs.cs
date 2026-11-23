@@ -27,12 +27,22 @@ internal sealed class CasePdfs(CaseReader reader, CaseFolders folders)
                     : view.Revision.Document?.Source
             )
                 is not null,
+            SourcePdfs = view.Revision.Document is null && !view.ShowDuplicateReading
+                ? view
+                    .Case.Sources.Select((source, index) => new { Source = source, Index = index })
+                    .Where(item => FindPdf(item.Source) is not null)
+                    .Select(item => new { item.Index, item.Source.DocumentId })
+                    .ToArray()
+                : [],
             OriginalPdfAvailable = FindOriginal(view.Case, view.Revision.OriginalInvoice)
                 is not null,
         };
 
     public string? FindDocument(string caseId, long reference) =>
         FindPdf(reader.ReadDocumentSource(caseId, reference));
+
+    public string? FindSource(string caseId, int index) =>
+        FindPdf(reader.ReadMetadata(caseId)?.Sources.ElementAtOrDefault(index));
 
     public string? FindDuplicate(string caseId, int number) =>
         FindPdf(reader.ReadRevision(caseId, number)?.DuplicateAttempt?.Reading.Source);

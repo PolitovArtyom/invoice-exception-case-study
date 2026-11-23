@@ -31,6 +31,10 @@ internal static class CaseEndpoints
         cases.MapPost("/{caseId}/confirmations", ConfirmProposal);
         cases.MapPost("/{caseId}/rechecks", RecheckInvoice);
         cases.MapGet(
+            "/{caseId}/sources/{index:int}/pdf",
+            (string caseId, int index, CasePdfs pdfs) => Pdf(pdfs.FindSource(caseId, index))
+        );
+        cases.MapGet(
             "/{caseId}/documents/{reference:long}/pdf",
             (string caseId, long reference, CasePdfs pdfs) =>
                 Pdf(pdfs.FindDocument(caseId, reference))

@@ -33,6 +33,25 @@ public sealed class InvoiceRegistrationTests : IDisposable
             tools.Select(tool => tool.Name).Order(StringComparer.Ordinal)
         );
 
+        Assert.Equal(
+            "object",
+            tools
+                .Single(tool => tool.Name == "register_invoice")
+                .ProtocolTool.InputSchema.GetProperty("properties")
+                .GetProperty("facts")
+                .GetProperty("type")
+                .GetString()
+        );
+        Assert.Equal(
+            "object",
+            tools
+                .Single(tool => tool.Name == "propose_match")
+                .ProtocolTool.InputSchema.GetProperty("properties")
+                .GetProperty("proposal")
+                .GetProperty("type")
+                .GetString()
+        );
+
         var opened = Payload(await Call(mcp, "open_case"));
         Assert.Equal(CaseTestEnvironment.ReviewerCaseId, opened["case_id"]!.GetValue<string>());
         Assert.Equal("core-v1", opened["policy_version"]!.GetValue<string>());
@@ -62,6 +81,38 @@ public sealed class InvoiceRegistrationTests : IDisposable
             "ORD-001",
             company["purchase_orders"]!["orders"]![0]!["order_id"]!.GetValue<string>()
         );
+    }
+
+    [Theory]
+    [InlineData("register_invoice", "facts")]
+    [InlineData("propose_match", "proposal")]
+    public async Task Should_reject_without_writes_when_an_mcp_object_argument_is_a_string(
+        string tool,
+        string argument
+    )
+    {
+        await using var app = _environment.Start();
+        await using var mcp = await ConnectMcp(app);
+        var history = Payload(await Call(mcp, "get_case_history"));
+        var arguments = new Dictionary<string, object?>
+        {
+            ["case_id"] = CaseTestEnvironment.ReviewerCaseId,
+            [argument] = "{}",
+        };
+        if (argument == "facts")
+            arguments["source"] = new
+            {
+                root = "own",
+                relative_path = "cases/case-911/documents/document-001.pdf",
+            };
+
+        var error = Payload(await mcp.CallToolAsync(tool, arguments), isError: true)["error"]!;
+        Assert.Equal("VALIDATION_ERROR", error["code"]!.GetValue<string>());
+        Assert.Equal(
+            "/" + argument,
+            Assert.Single(error["details"]!.AsArray())!["path"]!.GetValue<string>()
+        );
+        AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
     }
 
     [Fact]

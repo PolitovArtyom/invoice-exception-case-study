@@ -1,0 +1,7 @@
+{
+  "disableClaudeAiConnectors": true,
+  "permissions": {
+    "blockReadsOutsideWorkingDirectories": true,
+    "deny": ["Read(**/expected/**)", "Read(**/steps/**)"]
+  }
+}

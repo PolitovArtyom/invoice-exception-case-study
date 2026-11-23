@@ -1,0 +1,78 @@
+{
+  "004": {
+    "extraction": {
+      "scalar_fields": 38,
+      "value_differences": [],
+      "formatting_differences": [
+        {
+          "path": "/bank/iban",
+          "saved": "DE00 SYNT HETI C000 0000 001",
+          "reference": "DE00SYNTHETIC0000000001"
+        }
+      ],
+      "missing_reasons": 0,
+      "missing_reason_errors": {
+        "missing": [],
+        "unexpected": []
+      },
+      "quotes_checked": 36,
+      "quotes_not_found": [],
+      "missing_provenance": []
+    },
+    "rule_outcomes": [
+      {
+        "revision": 2,
+        "decision": "needs_review",
+        "public_step": 1,
+        "differences": []
+      }
+    ]
+  },
+  "010": {
+    "extraction": {
+      "scalar_fields": 38,
+      "value_differences": [],
+      "formatting_differences": [
+        {
+          "path": "/bank/iban",
+          "saved": "DE00 SYNT HETI C000 0000 001",
+          "reference": "DE00SYNTHETIC0000000001"
+        }
+      ],
+      "missing_reasons": 3,
+      "missing_reason_errors": {
+        "missing": [],
+        "unexpected": []
+      },
+      "quotes_checked": 33,
+      "quotes_not_found": [],
+      "missing_provenance": []
+    },
+    "rule_outcomes": [
+      {
+        "revision": 2,
+        "decision": "needs_information",
+        "public_step": 1,
+        "differences": []
+      },
+      {
+        "revision": 3,
+        "decision": "needs_information",
+        "public_step": null,
+        "differences": null
+      },
+      {
+        "revision": 4,
+        "decision": "needs_review",
+        "public_step": 2,
+        "differences": []
+      },
+      {
+        "revision": 5,
+        "decision": "clear",
+        "public_step": 3,
+        "differences": []
+      }
+    ]
+  }
+}

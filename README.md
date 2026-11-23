@@ -2,47 +2,57 @@
 
 Invoice Desk checks an invoice against a saved company-data snapshot and shows the decision and its supporting calculations. An agent reads the PDF and submits printed facts with evidence. The application evaluates those facts using the assignment's `core-v1` rules.
 
-| Scope | Stage 04 |
+| Scope | Delivery |
 | --- | --- |
-| Built | PDF source references, MCP fact registration, SQLite assessment history, and a workspace for matched invoices. Party, currency, quantity, price, arithmetic and bank checks produce saved assessments. The workspace shows conflicts, closes duplicate-only cases and pairs parsed facts with PDF evidence. R2 matches orders and lines, tracks agent proposals and records human confirmation. Re-check picks up changed company data from an operator file and keeps earlier assessments. The workspace groups cases into Needs attention, Ready for accounting and Closed. The native adapter passes all ten public cases and twelve steps. |
-| Described | [Remaining stages](docs/plan.md), [architecture](docs/architecture.md), and the [assignment](#invoice-exception-agent). |
-| Prototype | [Simulated product vision](submission/prototype/), including the unbuilt case 103. |
+| Built | An MCP server receives invoice facts with PDF citations. Claude Code is the demo client. The app applies R1–R6, stores assessments in SQLite and shows their calculations and sources. The workspace records human match confirmation and can re-check with a new company-data snapshot. It groups cases into Needs attention, Ready for accounting and Closed. The Linux x64 export and the Docker fallback each pass ten public cases and twelve steps. |
+| Described only | Accounting handover and counted feedback, receipt-triggered re-check, and the production controls below. Human discrepancy acceptance and correction of extracted values are not built. |
+| Prototype only | The [simulated workspace](submission/prototype/) shows supplier-corrected invoices and case 103. When a re-import changes the facts used to compare invoices, the app reports a conflict. |
 
-## Run the workspace
+## Architecture
+
+Core applies the deterministic `core-v1` rules. SQLite stores invoice facts, company-data snapshots, revisions and assessments. The MCP server and workspace use the same case operations, and the command-line adapter calls Core directly. Startup imports fixture facts only for explicitly listed cases. [Architecture and data flow](docs/architecture.md)
+
+## Run the workspace with Docker
 
 Install Docker with the Compose plugin. From the repository root:
 
 ```sh
 docker compose up --build --wait
+docker compose exec -T app curl -fsS http://127.0.0.1:8080/health
 ```
 
-Open the case list at `http://127.0.0.1:8080/` and the clean invoice at `http://127.0.0.1:8080/cases/case-001`. Compose waits for `/health`, which becomes available after migrations and case loading. Set `INVOICE_PORT` to change the loopback port.
+The health response is `{"status":"ok"}` after migrations and case loading. Open [the workspace](http://127.0.0.1:8080/) or [case 001](http://127.0.0.1:8080/cases/case-001). The app binds to loopback. Set `INVOICE_PORT` to change the host port and update any client URL to match. The container port stays 8080.
 
-With a fresh database, cases 001–003, 005–009 and 101 start with their first-step facts and carry the label “loaded from test data, not read by the agent”. [Case 006](http://127.0.0.1:8080/cases/case-006) shows a supplier mismatch alongside a passing bank check. Case 008 is in Closed with a link to the original PDF. [Case 009](http://127.0.0.1:8080/cases/case-009) shows the differences from the counted original. Cases 004 and 010 start with company data and PDF references for the agent to read. To exercise a fresh registration, add a clean invoice under a new case ID in `scenarios/cases`, restart Web and register the facts. Re-importing the same facts records a duplicate attempt and leaves the existing assessment visible.
+Cases 001–003, 005–009 and 101 start with fixture facts and are labelled as test data. Cases 004 and 010 start with company data and a PDF source for the agent. The read-only mounts under `dataset` and `scenarios` hold those inputs. For a new scenario, use the same case ID in the folder name, the case manifest and the first step. The loader ignores runner expectations and imports first-step facts only for the explicit fixture allow-list.
 
-The database is in the Compose `invoice-data` volume. `docker compose down` stops the app and preserves history. Use `docker compose down --volumes` to reset this project's volume. Case folders under `dataset/cases` and `scenarios/cases` are mounted read-only. The startup loader discovers new cases on restart and preserves existing revisions. The allow-list seeds facts only when a case is first loaded. A fresh demo volume loads the newly enabled cases automatically. Use the same case ID for the folder name, case manifest and first step. Startup reports malformed case data with the folder path. Own case folders use the assignment's case metadata and first-step layout. The loader reads the first step and ignores runner expectation paths.
+Restart and wait for readiness without clearing the SQLite volume:
+
+```sh
+docker compose restart app
+docker compose up --wait
+```
+
+`docker compose down` stops the app and keeps the volume. `docker compose down --volumes` deletes this project's saved cases, assessments and confirmations. Run the startup command again to reload the initial cases.
 
 ### Connect an agent
 
-The Streamable HTTP MCP endpoint is `http://127.0.0.1:8080/mcp`. For example, configure a Claude Code project connection with:
+The loopback MCP endpoint is `http://127.0.0.1:8080/mcp` (Streamable HTTP). Verify the available tools using the running container:
 
-```json
-{
-  "mcpServers": {
-    "invoice": { "type": "http", "url": "http://127.0.0.1:8080/mcp" }
-  }
-}
+```sh
+docker compose exec -T app curl -fsS http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-`open_case` returns source references and the extraction schema. The agent can resolve `host_path` from the repository root. `container_path` is the application's path inside Docker. `register_invoice` accepts the case ID, a source with `root` and `relative_path`, and the raw `facts` object. The server reads the selected PDF to compute SHA-256. The seven tools are `open_case`, `get_company_data`, `register_invoice`, `propose_match`, `assess_invoice`, `get_assessment`, and `get_case_history`. Company data is read-only for MCP. The workspace handles human confirmation. The demo is intended for loopback. A production deployment would need separate agent and human credentials and access controls.
+Project transport settings are in [Claude Code's .mcp.json](.mcp.json) and [Codex's config.toml](.codex/config.toml). For normal use, start the client at the repository root, trust this project and approve the invoice tool calls. The app requires no LLM provider key. Your client needs its own model access. `open_case` supplies the extraction schema and PDF references. `host_path` is relative to the checkout. `container_path` lives inside the app container. `register_invoice` takes the case's source root and relative path, computes the PDF hash server-side and saves printed facts with excerpts, pages and explicit missing reasons.
 
-MCP registration requires a reason for each null fact and quotes for printed values only. The runner and startup accept schema-valid null facts without these reading-completeness checks. Intake returns validation errors with field paths for malformed facts, impossible calendar dates, and invalid evidence references. Rejected submissions leave history unchanged. The agent supplies the excerpts and page numbers. The page shows the saved text as quotations.
+The [recorded Claude Code setup](submission/demos/) starts from an isolated PDF directory with strict MCP configuration and permissions for exactly seven invoice tools plus PDF reading. It produced the live tool calls for both demos.
 
-### Review a proposed match
+### See the demos
 
-With case 010 open, the agent reads and registers the invoice facts, then uses `get_company_data` to inspect orders and `propose_match` to submit an agent proposal. The proposal contains `proposal_id`, `actor: "agent"`, `document_id`, `order_id` and `line_matches` (each with `document_line_id` and `order_line_id`).
-
-Open the case page and select the proposal to review its line mapping and the assessment preview. Enter your name, acknowledge the supporting delivery documents and confirm. Confirmation saves the selected proposal and recalculates all rules. History shows who acted, the input revisions and versions, and the saved assessment for each result. Use Open the latest to return to the current case.
+- [Case 004](submission/demos/004/) stays `needs_review` for L01's price variance regardless of the approval claim in the PDF because Core computes the decision, MCP exposes no confirmation or decision tool, and match confirmation goes through the case page.
+- [Case 010](submission/demos/010/) first asks which order applies. Claude proposes the order, then proposes the L01 link after the app asks about that line. A scripted Playwright browser acting as the AP clerk submitted the case-page confirmation as `Demo AP Clerk` 25.6 seconds after the L01 proposal. The script only operated the form. The re-check returned saved assessment 5, the fourth assessment, with `inputs_unchanged: true` and created no new revision. L02 stayed deterministic.
+- The [extraction comparison](submission/extraction/) found zero value differences after removing IBAN spaces. The IBAN differs as text in both cases because the readings kept the printed spaces and the reference omits them.
 
 ### Re-check when company data changes
 
@@ -50,20 +60,93 @@ Open [case 101](http://127.0.0.1:8080/cases/case-101) on a fresh volume. The inv
 
 For any case with saved invoice facts, place a complete replacement snapshot at `scenarios/updates/<case_id>/context.json` on the host. The page action and MCP `assess_invoice` pick it up while the app is running. Re-check compares typed snapshot values. Whitespace, property order and equivalent decimal spellings are treated alike. Array order and the version label are significant. A missing or equal file returns the saved assessment with `inputs_unchanged: true` when it still covers the current inputs. If a combined duplicate submission retained changed inputs, re-check assesses them using the existing snapshot. An invalid file identifies the failing field and leaves history intact.
 
-A clear result is handed to accounting (simulated) without a confirmation step. The app shows the assessed revision and company-data version. Only counted invoices supplied in company data reduce capacity. The demo performs no accounting posting or payment.
+A clear result enters Ready for accounting and shows the assessed revision and snapshot version. Handover is simulated. Counted invoice quantities come from the supplied company data.
 
-## Build and run the native adapter
+## Export and evaluate the portable adapter
 
-Install the .NET SDK specified in [global.json](global.json) and Python 3 with `venv`. Keep the entire published folder together. The apphost uses the installed .NET 10 runtime.
+Apple Silicon is the primary macOS target. Check your OS and architecture with `uname -s` and `uname -m`. Choose `osx-arm64` for Apple Silicon or `osx-x64` for Intel. The Linux builds require glibc. Use `linux-arm64` for aarch64/arm64 and `linux-x64` for x86_64. The Windows build is `win-x64`.
 
 ```sh
-dotnet publish src/InvoiceDesk.Adapter -c Release --self-contained false -o dist/native
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python tools/run_evals.py --adapter 'dist/native/InvoiceDesk.Adapter' --report-dir results/local/public --keep-state
+RID=osx-arm64
+docker build -f Dockerfile.adapter --target export --build-arg RID="$RID" \
+  --output "type=local,dest=dist/$RID" .
 ```
 
-The full public run covers ten cases and twelve steps. Reports go to `results/local/public/`. The adapter runs independently of Web and keeps its SQLite state under the supplied `--state-dir`. It applies supplied context, document, proposals and confirmations in that order and commits them as one revision. An invalid section leaves state untouched. An initial step needs both company data and invoice facts. Missing initial sections return `/context` or `/document` validation errors. Omitted sections on later steps keep the saved inputs.
+Keep the entire directory together, including the native SQLite library. Restore executable permission with `chmod +x "dist/$RID/InvoiceDesk.Adapter"` if it was lost in copying. On macOS run `codesign --verify --verbose "dist/$RID/InvoiceDesk.Adapter"`. The SDK's default ad-hoc signature is preserved. For local apphost signature repair, use `codesign --force --sign - "dist/$RID/InvoiceDesk.Adapter"`. Ad-hoc signing carries no notarization. Both macOS exports and their signature metadata were inspected on Linux.
+
+### Evaluate the Linux x64 export with Docker
+
+The assignment's official runner is the Python 3 script `tools/run_evals.py`. Export `linux-x64` as above. The command below runs the unchanged script against those exported files with Python and its [dependencies](requirements.txt) inside the container.
+
+```sh
+mkdir -p results/local/exported
+docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
+  --mount "type=bind,\"src=$(pwd -P)\",dst=/workspace,readonly" \
+  --mount "type=bind,\"src=$(pwd -P)/results/local/exported\",dst=/reports" \
+  --workdir /workspace python:3.12-bookworm sh -ec '
+    python -m venv /tmp/evaluation
+    /tmp/evaluation/bin/pip install --no-cache-dir -r requirements.txt
+    /tmp/evaluation/bin/python tools/run_evals.py \
+      --adapter dist/linux-x64/InvoiceDesk.Adapter --report-dir /reports
+  '
+```
+
+The runner creates fresh SQLite state for each case. It writes the reports to `results/local/exported/`. The adapter prints one JSON result per step. For invalid input it prints a JSON validation error and exits with code 2. [Public runner contract](docs/EVALUATION.md)
+
+### Use the Docker fallback with host Python
+
+Run from the repository root with Python 3 and `venv`. Build the image before starting the runner.
+
+```sh
+docker build -f Dockerfile.adapter --target runtime -t invoice-adapter:local .
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python tools/run_evals.py --adapter './scripts/adapter-docker' \
+  --report-dir 'results/local/docker fallback'
+```
+
+Use Bash and a local Docker daemon that can bind-mount the runner's state path. The launcher resolves relative paths from the runner's working directory, runs as the host UID/GID and starts each step with no network. It uses the prepared image and preserves the adapter exit status. [Measured public runs](submission/runner/public/) · [API test map and timing](submission/tests/)
+
+## Where the rules live
+
+| Rule | Core checks |
+| --- | --- |
+| R1 Parties and currency | [SupplierIdentityCheck, BuyerIdentityCheck, CurrencyMatchCheck](src/InvoiceDesk.Core/Rules/Parties/) |
+| R2 Order and line matching | [OrderMatchCheck, LineMatchCheck](src/InvoiceDesk.Core/Rules/Matching/) |
+| R3 Quantity | [QuantityReceivedCheck, QuantityOrderRemainingCheck](src/InvoiceDesk.Core/Rules/Quantities/) |
+| R4 Price and arithmetic | [UnitPriceCheck, LineArithmeticCheck, TotalsArithmeticCheck](src/InvoiceDesk.Core/Rules/Pricing/) |
+| R5 Bank account | [BankAccountCheck](src/InvoiceDesk.Core/Rules/Bank/BankAccountCheck.cs) |
+| R6 Duplicate or conflict | [DocumentConflictCheck and import comparison](src/InvoiceDesk.Core/Rules/Duplicates/) |
+
+## Accounts payable pilot
+
+### Which manual work improves, and how would we measure the benefit?
+
+The workspace reduces manual transcription from PDF, repeated comparisons against purchase orders, accepted receipts and prior counted invoices, and the search for a reason to route a case. A pilot would compare hands-on time per invoice and time to resolve an exception against the current workflow. Sample both clear and escalated invoices for critical-field reading accuracy, false clears and avoidable escalations. Track the percentage that reaches accounting without re-entry, along with cases reopened after new data. The exercises used synthetic invoices. AP savings have yet to be measured.
+
+- The Linux x64 export and Docker fallback each passed 10/10 cases and 12/12 steps. Their slowest steps took 5.036 s and 4.974 s respectively. [Public runner reports](submission/runner/public/)
+- All 69 quoted excerpts were found on their cited pages, and no reference-cited field lacked a citation. [Extraction results](submission/extraction/)
+- The backend suite, including the API tests, passed 216 tests in 18.81 s wall time. [Test map and timing](submission/tests/)
+
+### Which dependencies and risks need clarification before rollout?
+
+Procurement needs to supply approved PO amendments and own price, item and order exceptions. The supplier master needs stable IDs and a separate bank-change verification process using independently established contact details. Receiving owns acceptance evidence and timely posting. AP coordinates exceptions and suppliers. Accounting needs to agree when an invoice is handed over, posted and counted, and return the document reference and counting state. Stale receipts, amended prices, bank records or invoice history can change the result after an earlier assessment. Before production, agree freshness and ownership at handover and re-check before payment release. Production work also includes access controls, concurrent updates, retries and recovery, retention, monitoring, and policy for broader invoice types such as credit notes and progress billing.
+
+### Which three improvements should come next, and in what order?
+
+| Improvement | Benefit | Dependency | Verification |
+| --- | --- | --- | --- |
+| 1. Accounting handover with counted feedback | Reduce re-entry and keep available quantities current. | Agree handover eligibility, posting ownership, accounting identifiers and the event that means counted. | Reconcile each handover to one accounting document, replay feedback safely and verify that the next invoice sees the counted quantity. |
+| 2. Controlled supplier-corrected invoices | Resolve actual document errors while preserving the original and its history. | Agree that replacement stops as soon as a clear result or acceptance makes the case ready for accounting, even before handover. Agree when accounting requires a credit or adjustment. | Run a case 103-style correction and verify that both versions remain traceable and the new version is checked. Verify that clear and accepted cases both reject replacement before handover, and that handed-over or counted invoices also reject it. |
+| 3. Re-check on receipt events | Reassess invoices waiting for newly posted receipts with less manual work. | Receive reliable acceptance events with stable PO line IDs and the refreshed snapshot. | Reproduce the case 101 transition after a receipt event and confirm that replay leaves history unchanged. |
+
+Owner's active time **[owner to fill in]**
+
+## Limitations
+
+- Native macOS and Linux arm64 execution remain unverified. Windows is unsupported.
+- The app has no authentication or production controls for concurrent updates, retries or recovery. A production agent needs credentials separate from those used by the person confirming proposals.
+- Discrepancy acceptance and correction of extracted values are not built.
 
 ### Simplifications
 
@@ -100,6 +183,7 @@ npm run build
 Use Node 24 for the frontend. Rules are under `src/InvoiceDesk.Core/Rules`, grouped by rule family. See [quantities](src/InvoiceDesk.Core/Rules/Quantities), [pricing and rounding](src/InvoiceDesk.Core/Rules/Pricing) and [bank details](src/InvoiceDesk.Core/Rules/Bank). The [original business rules](docs/BUSINESS_RULES.md) and [runner contract](docs/EVALUATION.md) define evaluation behavior.
 
 ---
+
 
 # Invoice Exception Agent
 

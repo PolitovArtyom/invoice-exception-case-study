@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+demo_directory=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+pdf_directory=$1
+prompt_file=$2
+
+tools=(
+    mcp__invoice__open_case
+    mcp__invoice__get_company_data
+    mcp__invoice__register_invoice
+    mcp__invoice__propose_match
+    mcp__invoice__assess_invoice
+    mcp__invoice__get_assessment
+    mcp__invoice__get_case_history
+)
+tool_list=$(IFS=,; printf '%s' "${tools[*]}")
+prompt=$(cat -- "$demo_directory/$prompt_file")
+system_prompt=$(cat -- "$demo_directory/system-prompt.txt")
+
+CDPATH= cd -- "$pdf_directory"
+env -u CLAUDE_CODE_PLUGIN_DIRS ENABLE_CLAUDEAI_MCP_SERVERS=false ENABLE_TOOL_SEARCH=false \
+    claude --print --model sonnet --effort medium \
+    --restricted --strict-mcp-config --mcp-config "$demo_directory/mcp.json" \
+    --setting-sources project --settings "$demo_directory/settings.json" \
+    --tools Read --allowedTools "$tool_list" \
+    --permission-mode dontAsk --permission-prompts none --no-chrome \
+    --disable-slash-commands --no-session-persistence \
+    --output-format stream-json --verbose --system-prompt "$system_prompt" "$prompt"

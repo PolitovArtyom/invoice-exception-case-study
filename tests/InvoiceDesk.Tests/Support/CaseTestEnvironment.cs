@@ -25,6 +25,13 @@ internal sealed class CaseTestEnvironment : IDisposable
             Path.Combine(own ? ScenarioPath : DatasetPath, "cases", caseId)
         );
 
+    public string CopyOwnCaseFixture(string caseId)
+    {
+        string fixture = Path.Combine(AppContext.BaseDirectory, "Fixtures", caseId);
+        CopyCaseFolder(fixture, Path.Combine(ScenarioPath, "cases", caseId));
+        return fixture;
+    }
+
     public void CopyLateReceiptCase()
     {
         const string caseId = "case-101";

@@ -1,0 +1,231 @@
+{
+  "schema_version": "1.0",
+  "adapter": "dist/linux-x64/InvoiceDesk.Adapter",
+  "dataset": "dataset",
+  "summary": {
+    "cases_passed": 10,
+    "cases_total": 10,
+    "steps_passed": 12,
+    "steps_total": 12,
+    "critical_false_clear": 0,
+    "over_escalation": 0,
+    "under_escalation": 0,
+    "adapter_failures": 0
+  },
+  "cases": [
+    {
+      "case_id": "case-001",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "clear",
+          "actual_outcome": "clear",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 4.018,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-002",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "clear",
+          "actual_outcome": "clear",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 4.514,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-003",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "blocked",
+          "actual_outcome": "blocked",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 3.798,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-004",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "needs_review",
+          "actual_outcome": "needs_review",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 5.036,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-005",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "blocked",
+          "actual_outcome": "blocked",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 4.869,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-006",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "blocked",
+          "actual_outcome": "blocked",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 3.07,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-007",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "blocked",
+          "actual_outcome": "blocked",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 3.618,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-008",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "duplicate",
+          "actual_outcome": "duplicate",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 2.995,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-009",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "blocked",
+          "actual_outcome": "blocked",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 3.027,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    },
+    {
+      "case_id": "case-010",
+      "passed": true,
+      "steps": [
+        {
+          "step": 1,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "needs_information",
+          "actual_outcome": "needs_information",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 2.827,
+          "stderr_tail": ""
+        },
+        {
+          "step": 2,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "needs_review",
+          "actual_outcome": "needs_review",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 2.492,
+          "stderr_tail": ""
+        },
+        {
+          "step": 3,
+          "passed": true,
+          "adapter_failure": null,
+          "differences": [],
+          "expected_outcome": "clear",
+          "actual_outcome": "clear",
+          "critical_false_clear": false,
+          "escalation": null,
+          "seconds": 2.863,
+          "stderr_tail": ""
+        }
+      ],
+      "state_dir": null
+    }
+  ]
+}

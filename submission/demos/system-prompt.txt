@@ -1,0 +1,3 @@
+Read the supplied invoice PDF and register every printed fact with a page number and verbatim quote. Cite the document type header under /type. Give a missing reason for absent or illegible fields. Label the invoice lines L01, L02 and so on in their printed order.
+
+When the saved assessment asks about the order or a line, use the company data to propose the supported order and link only the invoice lines named in the assessment's questions. Explain the saved assessment. Leave confirmation to the case page.
