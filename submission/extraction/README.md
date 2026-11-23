@@ -1,22 +1,22 @@
-# PDF extraction comparison
+# Сверка извлечённых данных
 
-The comparison runs after the agent sessions. It reads the saved facts from the latest assessment in each `get_case_history` response. It compares values to the reference extraction, looks for every submitted quote on its cited page, and lists any registered field for which the reference has a citation but the agent supplied none. Both agents cited the printed invoice header under `/type`.
+Скрипт берёт значения из последней оценки в ответе `get_case_history` и сравнивает с эталоном. Он ищет каждую цитату на указанной странице и перечисляет поля, для которых в эталоне есть цитата, а в записи агента её нет. Оба агента сослались на заголовок счёта в `/type`.
 
-| Case | Scalar fields checked | Value differences | Quotes checked | Quotes not found | Fields missing provenance |
+| Кейс | Проверено значений | Расхождений | Проверено цитат | Цитат не найдено | Полей без источника |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 004 | 38 | 0 | 36 | 0 | 0 |
 | 010 | 38 | 0 | 33 | 0 | 0 |
 
-Decimals are compared by value. There are zero value differences after removing IBAN spaces. The IBAN differs as text in both cases because the saved readings kept the printed spaces and the reference omits them. R5 compares IBANs with spaces removed. The missing reasons also match the reference. Case 004 has none. Case 010 records an absent PO reference and two absent SKUs.
+Десятичные числа сравниваются по значению. Оба чтения сохранили пробелы из PDF в IBAN. Эталон хранит IBAN без пробелов. R5 тоже сравнивает его без пробелов. Причины отсутствия совпали с эталоном. В 004 все поля есть. В 010 отсутствуют номер заказа и два SKU.
 
-Poppler's `pdftotext -f N -l N -layout` reads each cited PDF page. The quote check collapses layout whitespace and searches for the resulting literal substring.
+Скрипт читает страницу через `pdftotext -f N -l N -layout` из Poppler, сворачивает пробелы и ищет точное вхождение цитаты.
 
-The separate rule comparison uses the official runner's result schema and field comparator. Live results label the envelope by application revision. The comparison maps those labels to the corresponding public step numbers and checks that the actual revisions increase. All four assessments with public counterparts matched the public rules results. Case 004 stayed `needs_review`. Case 010 records four assessments. The order-only proposal at revision 3 exposed the L01 question. That intermediate revision passes the result schema and has no public counterpart. Case 010's revisions 2, 4 and 5 correspond to its three public steps.
+Отдельно скрипт проверяет оценки по официальной схеме результата и сравнивает поля так же, как официальный скрипт проверки. Ревизии 2, 4 и 5 кейса 010 соответствуют трём публичным шагам. Ревизия 3 с предложением одного заказа проходит схему и добавляет вопрос по L01 между этими шагами. Все четыре оценки с публичным шагом совпали с эталоном.
 
-Install Poppler and use the runner's Python environment from the repository root:
+Установите Poppler и запустите из корня репозитория в окружении Python для официальной проверки:
 
 ```sh
 .venv/bin/python submission/extraction/compare.py
 ```
 
-[Comparison script](compare.py) · [Recorded results](results.json)
+[Скрипт](compare.py) · [Результаты](results.json)

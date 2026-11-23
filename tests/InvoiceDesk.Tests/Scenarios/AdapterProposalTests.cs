@@ -82,6 +82,7 @@ public sealed class AdapterProposalTests
 
         var resend = Step(scenario, 2);
         resend.Remove("context");
+        resend["document"]!["content_sha256"] = new string('b', 64);
         resend["document"]!["facts"]!["due_date"] = "2026-12-31";
         var changed = Submit(resend, state.Path);
         AssertOutcome(

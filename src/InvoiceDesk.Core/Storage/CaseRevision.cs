@@ -35,8 +35,6 @@ internal sealed class CaseRevision
 
     public FactCorrection? Correction { get; init; }
 
-    public bool HasCorrectionConflict { get; init; }
-
     public InvoiceFacts? ReadFacts() => CorrectedFacts ?? Document?.Facts;
 }
 

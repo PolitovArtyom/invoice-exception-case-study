@@ -53,15 +53,18 @@ public sealed class CaseRepository(InvoiceDatabase database)
         ) ?? new CompanyDataSnapshot { CaseId = caseId, Data = companyData };
 
     internal bool InputsChanged(InvoiceCase invoiceCase, CaseRevision assessed) =>
-        assessed.Number != invoiceCase.CurrentRevision
-        && database.Revisions.Any(row =>
-            row.CaseId == invoiceCase.Id
-            && row.Number == invoiceCase.CurrentRevision
-            && (
-                row.SnapshotId != assessed.SnapshotId
-                || row.DocumentId != assessed.DocumentId
-                || row.Proposals != assessed.Proposals
-                || row.CorrectedFacts != assessed.CorrectedFacts
+        assessed.Result is { } result && result.PolicyVersion != CaseMetadata.PolicyVersion
+        || (
+            assessed.Number != invoiceCase.CurrentRevision
+            && database.Revisions.Any(row =>
+                row.CaseId == invoiceCase.Id
+                && row.Number == invoiceCase.CurrentRevision
+                && (
+                    row.SnapshotId != assessed.SnapshotId
+                    || row.DocumentId != assessed.DocumentId
+                    || row.Proposals != assessed.Proposals
+                    || row.CorrectedFacts != assessed.CorrectedFacts
+                )
             )
         );
 
@@ -134,6 +137,26 @@ public sealed class CaseRepository(InvoiceDatabase database)
             .Select(row => row.Source)
             .SingleOrDefault();
 
+    internal bool HasAccountingAssessment(InvoiceDocument document) =>
+        database
+            .Revisions.AsNoTracking()
+            .Where(row =>
+                row.CaseId == document.CaseId
+                && row.Document!.ContentSha256 == document.ContentSha256
+                && (row.Result != null || row.Acceptance != null)
+            )
+            .Select(row => new
+            {
+                row.Document!.Facts,
+                row.Result,
+                row.Acceptance,
+            })
+            .AsEnumerable()
+            .Any(row =>
+                row.Facts.DocumentId == document.Facts.DocumentId
+                && (row.Result?.Decision == Decision.Clear || row.Acceptance is not null)
+            );
+
     internal EarlierImport[] ReadEarlierImports(string caseId) =>
         (
             from document in database.Documents.AsNoTracking()
@@ -175,7 +198,8 @@ public sealed class CaseRepository(InvoiceDatabase database)
         RevisionAction action,
         OriginalInvoice? original,
         DuplicateAttempt? duplicate,
-        FactCorrection? correction
+        FactCorrection? correction,
+        DiscrepancyAcceptance? acceptance
     )
     {
         if (database.Entry(invoiceCase).State == EntityState.Detached)
@@ -194,7 +218,7 @@ public sealed class CaseRepository(InvoiceDatabase database)
             DuplicateAttempt = duplicate,
             CorrectedFacts = inputs.CorrectedFacts,
             Correction = correction,
-            HasCorrectionConflict = inputs.HasCorrectionConflict,
+            Acceptance = acceptance,
         };
         database.Revisions.Add(revision);
         invoiceCase.CurrentRevision = inputs.Number;

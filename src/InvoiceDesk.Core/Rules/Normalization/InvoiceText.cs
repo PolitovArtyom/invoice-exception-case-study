@@ -9,11 +9,12 @@ internal static class InvoiceText
     private static string? Name(string? value) =>
         value is null
             ? null
-            : string.Join(
+            : UnicodeCaseFolding.Fold(
+                string.Join(
                     ' ',
                     value.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
                 )
-                .ToLowerInvariant();
+            );
 
     public static string? Iban(string? value) =>
         value is null

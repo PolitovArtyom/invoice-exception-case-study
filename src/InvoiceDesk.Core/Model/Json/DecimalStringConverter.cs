@@ -24,9 +24,10 @@ internal class DecimalStringConverter : JsonConverter<decimal>
     ) => writer.WriteStringValue(value.ToString(CultureInfo.InvariantCulture));
 }
 
-internal sealed class InputDecimalStringConverter : DecimalStringConverter
+internal sealed class InputDecimalStringConverter(decimal maximum) : DecimalStringConverter
 {
-    internal const decimal MaximumSupportedMagnitude = 1_000_000_000m;
+    internal const decimal MaximumQuantity = 1_000_000_000m;
+    internal const decimal MaximumMoney = 10_000_000_000_000m;
 
     public override decimal Read(
         ref Utf8JsonReader reader,
@@ -41,15 +42,18 @@ internal sealed class InputDecimalStringConverter : DecimalStringConverter
                 CultureInfo.InvariantCulture,
                 out decimal value
             )
-            || value > MaximumSupportedMagnitude
+            || value > maximum
         )
-            throw new AmountLimitException();
+            throw new AmountLimitException(maximum);
 
         return value;
     }
 }
 
-internal sealed class AmountLimitException : JsonException;
+internal sealed class AmountLimitException(decimal maximum) : JsonException
+{
+    internal decimal Maximum { get; } = maximum;
+}
 
 internal sealed class MoneyStringConverter : DecimalStringConverter
 {

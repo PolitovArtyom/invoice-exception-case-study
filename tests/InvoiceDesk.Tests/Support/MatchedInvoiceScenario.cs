@@ -278,7 +278,42 @@ internal sealed record MatchedInvoiceScenario(InvoiceFacts Facts, CompanyData Co
     }
 
     public static JsonObject RawFacts(InvoiceFacts facts) =>
-        JsonNode.Parse(InvoiceJson.Write(facts))!.AsObject();
+        WithCompleteEvidence(JsonNode.Parse(InvoiceJson.Write(facts))!);
+
+    public static JsonObject WithCompleteEvidence(JsonNode facts)
+    {
+        var json = facts.DeepClone().AsObject();
+        var evidence = json["evidence"]!.AsArray();
+        var cited = evidence
+            .Select(item => item!["field_path"]!.GetValue<string>())
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (
+            var field in json.Where(field =>
+                field.Key
+                    is not ("schema_version" or "document_id" or "evidence" or "missing_fields")
+            )
+        )
+        {
+            foreach (var (path, value) in JsonFields.Leaves(field.Value, "/" + field.Key))
+            {
+                if (
+                    value is not null
+                    && !path.EndsWith("/line_id", StringComparison.Ordinal)
+                    && cited.Add(path)
+                )
+                    evidence.Add(
+                        new JsonObject
+                        {
+                            ["field_path"] = path,
+                            ["document_id"] = json["document_id"]!.GetValue<string>(),
+                            ["page"] = 1,
+                            ["excerpt"] = value.ToString(),
+                        }
+                    );
+            }
+        }
+        return json;
+    }
 
     public static object Source(bool second = false) =>
         new { root = "own", relative_path = SourceFile(second) };

@@ -26,7 +26,7 @@
           "actual_outcome": "clear",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 4.283,
+          "seconds": 3.047,
           "stderr_tail": ""
         }
       ],
@@ -45,7 +45,7 @@
           "actual_outcome": "clear",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 3.57,
+          "seconds": 2.995,
           "stderr_tail": ""
         }
       ],
@@ -64,7 +64,7 @@
           "actual_outcome": "blocked",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 4.974,
+          "seconds": 3.055,
           "stderr_tail": ""
         }
       ],
@@ -83,7 +83,7 @@
           "actual_outcome": "needs_review",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 3.058,
+          "seconds": 2.993,
           "stderr_tail": ""
         }
       ],
@@ -102,7 +102,7 @@
           "actual_outcome": "blocked",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 2.912,
+          "seconds": 2.921,
           "stderr_tail": ""
         }
       ],
@@ -121,7 +121,7 @@
           "actual_outcome": "blocked",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 2.682,
+          "seconds": 3.108,
           "stderr_tail": ""
         }
       ],
@@ -140,7 +140,7 @@
           "actual_outcome": "blocked",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 2.686,
+          "seconds": 2.965,
           "stderr_tail": ""
         }
       ],
@@ -159,7 +159,7 @@
           "actual_outcome": "duplicate",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 2.635,
+          "seconds": 3.158,
           "stderr_tail": ""
         }
       ],
@@ -178,7 +178,7 @@
           "actual_outcome": "blocked",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 2.85,
+          "seconds": 2.972,
           "stderr_tail": ""
         }
       ],
@@ -197,7 +197,7 @@
           "actual_outcome": "needs_information",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 3.017,
+          "seconds": 3.026,
           "stderr_tail": ""
         },
         {
@@ -209,7 +209,7 @@
           "actual_outcome": "needs_review",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 2.629,
+          "seconds": 2.852,
           "stderr_tail": ""
         },
         {
@@ -221,7 +221,7 @@
           "actual_outcome": "clear",
           "critical_false_clear": false,
           "escalation": null,
-          "seconds": 2.795,
+          "seconds": 2.937,
           "stderr_tail": ""
         }
       ],

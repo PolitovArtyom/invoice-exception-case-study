@@ -1,20 +1,22 @@
-# Live Claude Code demos
+# Демонстрации в Claude Code
 
-The [run command](run-claude) records stream JSON using [the strict MCP config](mcp.json), [file permissions](settings.json) and [the system prompt](system-prompt.txt). The client was Claude Code 2.1.330 and resolved `claude-sonnet-5-5` in all three print sessions. The initialization events list Read and the seven invoice MCP tools. Read is limited to the working directory, which holds only the PDF copy. There is no agent tool for shell commands, web requests, edits or page confirmation. Session persistence and slash commands are disabled.
+[Скрипт запуска](run-claude) записывает поток JSON. В каждой сессии Claude Code 2.1.330 выбрал модель `claude-sonnet-5-5`. Доступны Read и семь инструментов MCP для счетов. [Настройки доступа](settings.json) ограничивают чтение рабочей папкой, в которой лежит только копия PDF. У агента нет инструментов для консоли, запроса к веб-странице, правок или подтверждения предложения. Сохранение сессий и команды со слешем отключены. [Системный запрос](system-prompt.txt)
 
-Each session starts in its own copy of the case's PDF directory, outside the checkout. The agent receives its prompt, that PDF and MCP replies. The Compose app supplies company data, stores its state in a Docker volume and mounts the case directories read-only. Neither the runner's inputs nor its reference outputs are available to Claude.
+Кейсы 004 и 010 записаны на Stage 07. Видеозаписи показывают действия в карточке, включая принятие расхождения в 004 и подтверждение сопоставления в 010. [Проверка на чистом клоне](../rehearsal.md)
 
-From the repository root, choose a fresh Compose volume and prepare the PDF copies:
+Для каждого кейса создаётся отдельная папка вне репозитория. Агент получает запрос, PDF и ответы MCP. Приложение подаёт данные компании, хранит состояние в томе Docker и монтирует файлы кейсов только для чтения. У агента нет доступа к входам и эталонам официальной проверки.
+
+Из корня репозитория запустите приложение с чистым томом и скопируйте PDF. Скрипты используют `INVOICE_BASE_URL` со значением по умолчанию `http://127.0.0.1:8080`. Если задаёте другой `INVOICE_PORT`, экспортируйте соответствующий `INVOICE_BASE_URL` перед обоими запусками.
 
 ```bash
-INVOICE_PORT=18130 docker compose -p invoice-desk-demo up --build --wait
+docker compose -p invoice-desk-demo up --build --wait
 demo_root=$(mktemp -d)
 mkdir "$demo_root"/{004,010,claude}
 cp dataset/cases/case-004/documents/document-001.pdf "$demo_root/004/"
 cp dataset/cases/case-010/documents/document-001.pdf "$demo_root/010/"
 ```
 
-Use an authenticated Claude configuration in the temporary `claude` directory. The recordings used an isolated copy of existing client authentication. To repeat the calls:
+Временной папке `claude` нужна действующая авторизация Claude. В записи использовалась изолированная копия авторизации клиента. Вызовы для двух кейсов:
 
 ```bash
 for case_id in 004 010; do
@@ -24,7 +26,7 @@ for case_id in 004 010; do
 done
 ```
 
-To reproduce the scripted confirmation on the case 010 page, run the [Playwright script](010/confirm.mjs) from a temporary installation:
+Для подтверждения на странице 010 запустите [скрипт Playwright](010/confirm.mjs) из временной установки. Он сохранит видео и снимки в `demo_root`.
 
 ```bash
 npm install --prefix "$demo_root/browser" playwright@1.58.2
@@ -33,7 +35,7 @@ cp submission/demos/010/confirm.mjs "$demo_root/browser/"
 node "$demo_root/browser/confirm.mjs" "$demo_root"
 ```
 
-Then run a second stateless print session:
+Затем запустите новую сессию для повторной проверки:
 
 ```bash
 env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT CLAUDE_CONFIG_DIR="$demo_root/claude" \
@@ -41,8 +43,8 @@ env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT CLAUDE_CONFIG_DIR="$demo_root/claude
   > "$demo_root/010-after.jsonl"
 ```
 
-The published stream JSON retains the resolved model, exposed tools, tool arguments and results, and PDF payloads. It drops `rate_limit_event` records, including quota, utilization, reset times and organization overage settings. It also removes `credential_expires_at`, `apiKeySource` and provider `request_id` fields. Those fields describe the client account or identify provider requests. The temporary working directory is redacted as `<isolated-demo>`. The retained runs contain synthetic case data.
+В опубликованных записях сохранены модель, инструменты, аргументы, ответы и содержимое PDF. Из записей убраны `rate_limit_event`, `credential_expires_at`, `apiKeySource`, `request_id` и локальные списки агентов и расширений. Путь временной рабочей папки заменён на `<isolated-demo>`. Данные кейсов синтетические.
 
-- [004 · Instruction printed inside the invoice](004/)
-- [010 · Agent proposal and browser confirmation](010/)
-- [Post-run extraction and assessment comparison](../extraction/)
+- [004 · Указание внутри PDF](004/)
+- [010 · Предложение агента и подтверждение в браузере](010/)
+- [Сверка извлечённых данных и оценок](../extraction/)

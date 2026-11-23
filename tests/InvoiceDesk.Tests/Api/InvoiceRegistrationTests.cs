@@ -319,6 +319,30 @@ public sealed class InvoiceRegistrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Should_report_all_uncited_printed_facts_without_writes_when_registering()
+    {
+        await using var app = _environment.Start();
+        await using var mcp = await ConnectMcp(app);
+        var history = Payload(await Call(mcp, "get_case_history"));
+        var facts = PublicCases.CleanFacts();
+        string[] fields = ["/currency", "/lines/0/quantity"];
+        var citations = facts["evidence"]!.AsArray();
+        foreach (string field in fields)
+            citations.Remove(
+                citations.Single(item => item!["field_path"]!.GetValue<string>() == field)
+            );
+
+        var error = Payload(await Register(mcp, facts), isError: true)["error"]!;
+
+        Assert.Equal("VALIDATION_ERROR", error["code"]!.GetValue<string>());
+        Assert.Equal(
+            fields.Select(field => "/facts" + field),
+            error["details"]!.AsArray().Select(detail => detail!["path"]!.GetValue<string>())
+        );
+        AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
+    }
+
+    [Fact]
     public async Task Should_reject_evidence_when_it_points_to_itself()
     {
         await using var app = _environment.Start();

@@ -4,6 +4,8 @@ set -euo pipefail
 demo_directory=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 pdf_directory=$1
 prompt_file=$2
+base_url=${INVOICE_BASE_URL:-http://127.0.0.1:8080}
+printf -v mcp_config '{"mcpServers":{"invoice":{"type":"http","url":"%s/mcp"}}}' "${base_url%/}"
 
 tools=(
     mcp__invoice__open_case
@@ -21,7 +23,7 @@ system_prompt=$(cat -- "$demo_directory/system-prompt.txt")
 CDPATH= cd -- "$pdf_directory"
 env -u CLAUDE_CODE_PLUGIN_DIRS ENABLE_CLAUDEAI_MCP_SERVERS=false ENABLE_TOOL_SEARCH=false \
     claude --print --model sonnet --effort medium \
-    --restricted --strict-mcp-config --mcp-config "$demo_directory/mcp.json" \
+    --restricted --strict-mcp-config --mcp-config "$mcp_config" \
     --setting-sources project --settings "$demo_directory/settings.json" \
     --tools Read --allowedTools "$tool_list" \
     --permission-mode dontAsk --permission-prompts none --no-chrome \

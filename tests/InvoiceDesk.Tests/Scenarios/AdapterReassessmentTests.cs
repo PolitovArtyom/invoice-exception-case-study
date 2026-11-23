@@ -9,6 +9,102 @@ namespace InvoiceDesk.Tests.Scenarios;
 
 public sealed class AdapterReassessmentTests
 {
+    [Theory]
+    [InlineData("ORIGINAL-008")]
+    [InlineData("DOC-008")]
+    public async Task Should_block_against_counted_original_when_context_only_step_restores_supplier(
+        string originalDocumentId
+    )
+    {
+        using var state = new TemporaryDirectory();
+        var firstStep = PublicCases.ReadFirstStep("case-008");
+        var counted = firstStep["context"]!["invoice_history"]!["documents"]![0]!;
+        counted["document_id"] = originalDocumentId;
+        counted["content_sha256"] = firstStep["document"]!["content_sha256"]!.DeepClone();
+        ImportWithoutSupplier(firstStep, state.Path);
+
+        var refreshed = ContextOnly(firstStep, 2, "CTX-008-SUPPLIER-RESTORED");
+        var assessment = Submit(refreshed, state.Path);
+        AssertOutcome(
+            assessment,
+            "blocked",
+            "DOC-008",
+            ["L01", "L02", "L03"],
+            [new("DOCUMENT_CONFLICT", "DOC-008", "fail", "blocked")],
+            matchedOrderId: "ORD-008",
+            disposition: "conflict",
+            originalDocumentId: originalDocumentId
+        );
+        var saved = await AssertSavedAssessment(
+            state.Path,
+            "case-008",
+            assessment,
+            2,
+            duplicate: false
+        );
+        Assert.Null(saved["revision"]!["original_invoice"]!["document_reference"]);
+    }
+
+    [Fact]
+    public async Task Should_clear_when_reassessment_finds_earlier_copies_of_the_same_document()
+    {
+        using var state = new TemporaryDirectory();
+        var step = PublicCases.ReadFirstStep("case-008");
+        step["context"]!["invoice_history"]!["documents"] = new JsonArray();
+        ImportWithoutSupplier(step, state.Path);
+
+        step["step"] = 2;
+        ImportWithoutSupplier(step, state.Path);
+
+        var refreshed = ContextOnly(step, 3, "CTX-008-SUPPLIER-RESTORED");
+        var assessment = Submit(refreshed, state.Path);
+        AssertOutcome(
+            assessment,
+            "clear",
+            "DOC-008",
+            ["L01", "L02", "L03"],
+            [],
+            matchedOrderId: "ORD-008"
+        );
+        await AssertSavedAssessment(state.Path, "case-008", assessment, 3, duplicate: false);
+    }
+
+    [Fact]
+    public async Task Should_keep_invoice_clear_when_rechecked_after_the_same_document_is_counted()
+    {
+        using var state = new TemporaryDirectory();
+        var firstStep = PublicCases.ReadFirstStep("case-008");
+        var uncounted = firstStep.DeepClone().AsObject();
+        uncounted["context"]!["invoice_history"]!["documents"] = new JsonArray();
+        AssertCheck(Submit(uncounted, state.Path), "DOCUMENT_CONFLICT", "pass");
+
+        var equalSnapshot = ContextOnly(uncounted, 2, "CTX-008-v1");
+        var sameSnapshotAssessment = Submit(equalSnapshot, state.Path);
+        AssertOutcome(
+            sameSnapshotAssessment,
+            "clear",
+            "DOC-008",
+            ["L01", "L02", "L03"],
+            [],
+            matchedOrderId: "ORD-008"
+        );
+
+        var counted = ContextOnly(firstStep, 3, "CTX-008-COUNTED");
+        var sameDocument = counted["context"]!["invoice_history"]!["documents"]![0]!;
+        sameDocument["document_id"] = "DOC-008";
+        sameDocument["content_sha256"] = firstStep["document"]!["content_sha256"]!.DeepClone();
+        var assessment = Submit(counted, state.Path);
+        AssertOutcome(
+            assessment,
+            "clear",
+            "DOC-008",
+            ["L01", "L02", "L03"],
+            [],
+            matchedOrderId: "ORD-008"
+        );
+        await AssertSavedAssessment(state.Path, "case-008", assessment, 3, duplicate: false);
+    }
+
     [Fact]
     public async Task Should_keep_the_resolved_assessment_when_its_invoice_is_resent()
     {
@@ -221,10 +317,13 @@ public sealed class AdapterReassessmentTests
         context["goods_receipts"]!["receipts"] = new JsonArray();
         var counted = context["invoice_history"]!["documents"]![0]!;
         counted["document_id"] = historyId;
-        if (historyId == "DOC-008")
-            counted["content_sha256"] = original["document"]!["content_sha256"]!.DeepClone();
+        counted["content_sha256"] = original["document"]!["content_sha256"]!.DeepClone();
+        bool sameDocument = historyId == "DOC-008";
 
         var assessment = Submit(refreshed, state.Path);
+        ExpectedCheck[] conflict = sameDocument
+            ? []
+            : [new("DOCUMENT_CONFLICT", "DOC-008", "fail", "blocked")];
         AssertOutcome(
             assessment,
             "blocked",
@@ -234,8 +333,11 @@ public sealed class AdapterReassessmentTests
                 new("QTY_RECEIVED", "L01", "fail", "blocked"),
                 new("QTY_RECEIVED", "L02", "fail", "blocked"),
                 new("QTY_RECEIVED", "L03", "fail", "blocked"),
+                .. conflict,
             ],
-            matchedOrderId: "ORD-008"
+            matchedOrderId: "ORD-008",
+            disposition: sameDocument ? "new" : "conflict",
+            originalDocumentId: sameDocument ? null : historyId
         );
         AssertTotals(assessment, "1614.00", "322.80", "1936.80");
         Assert.All(assessment["lines"]!.AsArray(), line =>
@@ -349,7 +451,7 @@ public sealed class AdapterReassessmentTests
         Assert.Empty(result["questions"]!.AsArray());
     }
 
-    private static async Task AssertSavedAssessment(
+    private static async Task<JsonNode> AssertSavedAssessment(
         string statePath,
         string caseId,
         JsonNode assessment,
@@ -381,5 +483,6 @@ public sealed class AdapterReassessmentTests
             Assert.NotNull(history[0]!["assessment_id"]);
             Assert.Null(history[0]!["duplicate_attempt"]);
         }
+        return saved;
     }
 }

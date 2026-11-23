@@ -95,6 +95,45 @@ public sealed class InvoicePartyTests
         AssertBaselineAmounts(await scenario.RegisterAndRead(), "clear", []);
     }
 
+    [Fact]
+    public async Task Should_resolve_buyer_when_name_requires_full_case_folding()
+    {
+        using var environment = new CaseTestEnvironment();
+        string folder = environment.CopyCase(PublicCases.CleanCase);
+        var step = PublicCases.ReadFirstStep();
+        var facts = step["document"]!["facts"]!;
+        facts["buyer"]!["legal_name"] = "STRASSE BERLIN";
+        facts["buyer"]!["registration_id"] = null;
+        var evidence = facts["evidence"]!.AsArray();
+        foreach (
+            var item in evidence
+                .Where(item =>
+                    Text(item!, "field_path") is "/buyer/legal_name" or "/buyer/registration_id"
+                )
+                .ToArray()
+        )
+            evidence.Remove(item);
+        facts["missing_fields"] = new JsonArray(
+            new JsonObject
+            {
+                ["field_path"] = "/buyer/registration_id",
+                ["reason"] = "not_present_in_document",
+            }
+        );
+        step["context"]!["buyers"]!["buyers"]![0]!["legal_name"] = "Straße Berlin";
+        File.WriteAllText(Path.Combine(folder, "steps", "step-001.json"), step.ToJsonString());
+
+        await using var app = environment.Start();
+        using var page = app.CreateClient();
+        var result = (await Read(page, "/api/cases/case-001"))["revision"]!["result"]!;
+        Assert.Equal("clear", Text(result, "decision"));
+        var buyerCheck = Assert.Single(result["checks"]!.AsArray(), item =>
+            Text(item!, "code") == "BUYER_IDENTITY"
+        )!;
+        Assert.Equal("pass", Text(buyerCheck, "status"));
+        Assert.Equal("BUYER-001", Text(buyerCheck["actual"]!["resolved_buyer_id"]!, "value"));
+    }
+
     [Theory]
     [Trait("H", "H-04")]
     [InlineData("Unlisted GmbH", false)]

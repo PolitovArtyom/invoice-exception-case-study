@@ -24,12 +24,14 @@ public sealed class LineMatchingTests
     }
 
     [Theory]
-    [InlineData(null, "  Work   GLOVES ", "Work gloves", "explicit_alias")]
-    [InlineData(" glove ", "Different description", "Another alias", "sku")]
+    [InlineData(null, "  Work   GLOVES ", "Gloves", "Work gloves", "explicit_alias")]
+    [InlineData(" glove ", "Different description", "Gloves", "Another alias", "sku")]
+    [InlineData(null, "Maßband", "Massband", "Another alias", "description")]
     [Trait("H", "H-21")]
-    public async Task Should_match_line_when_only_explicit_alias_or_unique_sku_matches(
+    public async Task Should_match_line_when_one_normalized_key_matches(
         string? sku,
         string description,
+        string orderDescription,
         string alias,
         string reason
     )
@@ -37,6 +39,7 @@ public sealed class LineMatchingTests
         var baseline = MatchedInvoiceScenario.Baseline();
         var orderLine = baseline.CompanyData.PurchaseOrders.Orders[0].Lines[0] with
         {
+            Description = orderDescription,
             ExplicitAliases = [alias],
         };
         var result = await baseline

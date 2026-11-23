@@ -10,8 +10,7 @@ internal sealed record RevisionInputs(
     CompanyDataSnapshot Snapshot,
     InvoiceDocument? Document,
     RegisteredProposal[] Proposals,
-    InvoiceFacts? CorrectedFacts,
-    bool HasCorrectionConflict
+    InvoiceFacts? CorrectedFacts
 )
 {
     public CompanyData CompanyData => Snapshot.Data;

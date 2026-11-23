@@ -283,7 +283,7 @@ td small {
   border-top: 1px solid var(--line);
 }
 
-.invoice-meta a {
+.invoice-meta a:last-child {
   margin-left: auto;
 }
 
@@ -355,7 +355,7 @@ summary {
     justify-content: start;
   }
 
-  .invoice-meta a {
+  .invoice-meta a:last-child {
     margin-left: 0;
   }
 }

@@ -43,9 +43,6 @@ namespace InvoiceDesk.Core.Storage.Migrations
                     b.Property<string>("DuplicateAttempt")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("HasCorrectionConflict")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("OriginalInvoice")
                         .HasColumnType("TEXT");
 

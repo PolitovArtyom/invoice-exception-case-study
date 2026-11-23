@@ -215,13 +215,13 @@ watch(
         </p>
       </div>
       <div class="invoice-meta">
-        <span
-          >Revision {{ view.revision.number }} ·
-          <span class="mono">{{ view.revision.context_version }}</span></span
-        >
-        <span v-if="readingOrigin">{{
-          readingOriginLabels[readingOrigin]
-        }}</span>
+        <span>
+          Revision {{ view.revision.number }} ·
+          <span class="mono">{{ view.revision.context_version }}</span>
+          <template v-if="readingOrigin">
+            · {{ readingOriginLabels[readingOrigin] }}
+          </template>
+        </span>
         <a v-if="pdf" :href="pdf" target="_blank" rel="noopener"
           >Open invoice PDF ↗</a
         >
@@ -237,6 +237,12 @@ watch(
           >
         </template>
         <span v-else class="muted">Invoice PDF unavailable</span>
+        <InvoiceRecheck
+          v-if="!revision && document && !view.show_duplicate_reading"
+          :key="caseId"
+          :case-id="caseId"
+          @rechecked="load()"
+        />
       </div>
     </section>
     <section
@@ -255,12 +261,6 @@ watch(
         in a later company-data snapshot.
       </p>
     </section>
-    <InvoiceRecheck
-      v-if="!revision && document && !view.show_duplicate_reading"
-      :key="caseId"
-      :case-id="caseId"
-      @rechecked="load()"
-    />
     <section
       v-if="view.show_duplicate_reading && original"
       class="card"

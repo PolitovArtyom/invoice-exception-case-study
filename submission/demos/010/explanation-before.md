@@ -1,15 +1,13 @@
-I registered the invoice facts and proposed order ORD-010 with one line link. The case now stands at **needs_review**, and I'm stopping here for the clerk to confirm on the case page.
+# Объяснение агента до подтверждения, перевод
 
-**Registration.** I registered INV-2026-4110 from the isolated `document-001.pdf`, with page 1 evidence and a verbatim quote for each fact. `/type` cites the "INVOICE" header. The lines are L01 (wall plugs) and L02 (mortar). Three fields are marked `not_present_in_document`: the PO reference and the SKU on each line. The first assessment (#2) decided **needs_information**. It asked which purchase order the invoice refers to. The supplier, buyer, currency, totals, line arithmetic and bank account were not blocking. The supplier and buyer checks showed unknown only because no order was matched yet. The bank account IBAN is on the approved list.
+Зарегистрирован счёт INV-2026-4110 от Nordbau Supply GmbH для Fictional Siteworks d.o.o. Счёт выставлен 2026-10-26, срок оплаты 2026-11-25. Тип взят из «INVOICE». Все напечатанные поля имеют цитаты с первой страницы. Номер заказа и оба SKU отмечены как `not_present_in_document`.
 
-**First proposal.** The invoice has no PO reference, so I proposed ORD-010 (PO-2026-7110) with no line links, since that question named no lines. I chose ORD-010 over ORD-010-B (PO-2026-7999) because only ORD-010 has accepted goods receipts, dated 2026-10-23. Both orders have identical lines, so this is a judgment call for the clerk. That assessment (#3) matched L02 to OL-010-02 by description, and every check on it passed. It then asked which order line matches L01.
+L01 содержит 100 дюбелей по 0.35, L02 — 20 мешков ремонтного раствора по 18.75. Итоги сошлись: 410.00 до НДС, 82.00 НДС, 492.00 EUR всего. Банковский счёт одобрен. Дубликата нет.
 
-**Second proposal.** I linked L01 to OL-010-01 and nothing else. The unit, quantity of 100 and price of 0.35 agree, and 100 pieces were received.
+В первой оценке был вопрос, к какому заказу относится счёт. В данных два открытых заказа с одинаковыми строками и ценами, ORD-010 (PO-2026-7110) и ORD-010-B (PO-2026-7999). Только для ORD-010 есть принятые поставки от 2026-10-23, на 100 и 20 штук. Агент предложил его без привязки строк, поскольку вопрос был только о заказе. L02 совпала с OL-010-02 по описанию. Затем появился вопрос по L01.
 
-**Current result (#4).** Two checks fail, both at needs_review severity:
-- **ORDER_MATCH:** the invoice prints no PO reference, and the order expects PO-2026-7110. The order link rests on my proposal and the receipts, not on the invoice.
-- **LINE_MATCH for L01:** the invoice says "Galvanised wall plug 10mm" and the order says "Wall plug galv. 10 mm". There is no SKU or alias, so the system won't match them automatically. The link comes from my proposal.
+Второе предложение связывает L01 с OL-010-01. Это оставшаяся позиция с тем же количеством, единицей и ценой. Проверки количества и цены прошли. Ранее учтённых количеств нет.
 
-Everything else passes, including quantities, unit prices, line and total arithmetic, supplier, buyer, currency and bank account. No questions remain open.
+**Результат — `needs_review`.** Для `ORDER_MATCH` нужна связь с заказом, которого нет в PDF. Для `LINE_MATCH` по L01 нужно подтвердить связь между «Galvanised wall plug 10mm» в счёте и «Wall plug galv. 10 mm» в заказе. Точного совпадения, SKU или псевдонима нет. Открытых вопросов к агенту больше нет. Обе связи ждут подтверждения в карточке.
 
-**For the clerk:** confirm or reject ORD-010 versus ORD-010-B, and the L01 link to OL-010-01.
+[Ответ агента в записи JSON](before-confirmation.jsonl)

@@ -59,6 +59,31 @@ public sealed class PublicReplayTests
     }
 
     [Theory]
+    [InlineData("1000000000.01")]
+    [InlineData("10000000000000.00")]
+    public void Should_block_on_totals_arithmetic_when_a_large_declared_total_does_not_add_up(
+        string total
+    )
+    {
+        var step = PublicCases.ReadFirstStep();
+        step["document"]!["facts"]!["declared_total"] = total;
+        using var state = new TemporaryDirectory();
+        using var input = new StringReader(step.ToJsonString());
+        using var stdout = new StringWriter();
+
+        Assert.Equal(0, RunnerAdapter.Run(input, stdout, state.Path));
+
+        var result = JsonNode.Parse(stdout.ToString())!;
+        AssignmentSchemas.Instance.Validate("step-output", result);
+        Assert.Equal("blocked", result["decision"]!.GetValue<string>());
+        var totals = Assert.Single(result["checks"]!.AsArray(), check =>
+            check!["code"]!.GetValue<string>() == "TOTALS_ARITHMETIC"
+        )!;
+        Assert.Equal("fail", totals["status"]!.GetValue<string>());
+        Assert.Equal("blocked", totals["severity"]!.GetValue<string>());
+    }
+
+    [Theory]
     [InlineData("invoice price")]
     [InlineData("invoice quantity")]
     [InlineData("invoice total")]
@@ -72,18 +97,18 @@ public sealed class PublicReplayTests
         switch (field)
         {
             case "invoice price":
-                step["document"]!["facts"]!["lines"]![0]!["unit_net_price"] = "1000000000.01";
+                step["document"]!["facts"]!["lines"]![0]!["unit_net_price"] = "10000000000000.01";
                 break;
             case "invoice quantity":
                 step["document"]!["facts"]!["lines"]![0]!["quantity"] = "1000000000.001";
                 break;
             case "invoice total":
-                step["document"]!["facts"]!["declared_total"] = "79228162514264337593543950335.01";
+                step["document"]!["facts"]!["declared_total"] = "10000000000000.01";
                 break;
             case "order price":
                 step["context"]!["purchase_orders"]!["orders"]![0]!["lines"]![0]![
                     "unit_net_price"
-                ] = "1000000000.01";
+                ] = "10000000000000.01";
                 break;
             case "receipt quantity":
                 step["context"]!["goods_receipts"]!["receipts"]![0]!["accepted_quantity"] =

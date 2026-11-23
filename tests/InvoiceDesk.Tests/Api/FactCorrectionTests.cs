@@ -108,7 +108,7 @@ public sealed class FactCorrectionTests
         var resend = Payload(
             await Register(
                 mcp,
-                sameDocument["facts"]!,
+                MatchedInvoiceScenario.WithCompleteEvidence(sameDocument["facts"]!),
                 new { root = "own", relative_path = "cases/case-102/documents/document-001.pdf" },
                 ReadingCase
             )
@@ -133,7 +133,7 @@ public sealed class FactCorrectionTests
         var changedReading = Payload(
             await Register(
                 mcp,
-                original["facts"]!,
+                MatchedInvoiceScenario.WithCompleteEvidence(original["facts"]!),
                 new { root = "own", relative_path = "cases/case-102/documents/document-001.pdf" },
                 ReadingCase
             )
@@ -141,22 +141,13 @@ public sealed class FactCorrectionTests
         Assert.Equal(5, changedReading["input_revision"]!.GetValue<int>());
         Assert.Equal("conflict", Text(changedReading, "import_disposition"));
         var equalReading = await Correct(page, ReadingCase, 5, PricePath, "6.40");
-        AssertOutcome(
-            equalReading["result"]!,
-            "blocked",
-            "DOC-102",
-            ["L01", "L02"],
-            [new("DOCUMENT_CONFLICT", "DOC-102", "fail", "blocked")],
-            matchedOrderId: "ORD-102",
-            disposition: "conflict",
-            originalDocumentId: "DOC-102"
-        );
-        AssertCorrectedAmounts(equalReading["result"]!);
+        AssertCorrectedPrice(equalReading["result"]!);
         var resolved = await Read(page, ReadingUrl);
-        Assert.Equal("needs_attention", Text(resolved, "stage"));
+        Assert.Equal("ready_for_accounting", Text(resolved, "stage"));
+        Assert.Null(resolved["revision"]!["original_invoice"]);
         AssertSameJson(
-            original["reference"],
-            resolved["revision"]!["original_invoice"]!["document_reference"]
+            original["content_sha256"],
+            resolved["revision"]!["document"]!["content_sha256"]
         );
         Assert.NotEqual(
             original["reference"]!.GetValue<long>(),
@@ -288,8 +279,24 @@ public sealed class FactCorrectionTests
     {
         var scenario = MatchedInvoiceScenario.Baseline();
         await using var test = await ProposalCase.Start(scenario);
-        var counted = scenario.WithCountedInvoice(scenario.Facts, "HISTORY-EQUAL");
-        var reassessed = test.ReplaceCompanyData(counted.CompanyData);
+        var view = await Read(test.Page, ProposalCase.CaseUrl);
+        string contentSha256 = Text(view["revision"]!["document"]!, "content_sha256")!;
+        var counted = scenario.WithCountedInvoice(scenario.Facts, "D").CompanyData;
+        var reassessed = test.ReplaceCompanyData(
+            counted with
+            {
+                InvoiceHistory = counted.InvoiceHistory with
+                {
+                    Documents =
+                    [
+                        counted.InvoiceHistory.Documents[0] with
+                        {
+                            ContentSha256 = contentSha256,
+                        },
+                    ],
+                },
+            }
+        );
         AssertClear(reassessed);
 
         var corrected = await Correct(

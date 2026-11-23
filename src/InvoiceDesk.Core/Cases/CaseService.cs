@@ -281,6 +281,7 @@ public sealed class CaseService(
             submission.CompanyData is not null,
             submission.Reading is not null
         );
+        var acceptance = computed.Duplicate is null ? null : current?.Acceptance;
         repository.Append(
             invoiceCase,
             computed.Inputs,
@@ -288,7 +289,8 @@ public sealed class CaseService(
             action,
             computed.Original,
             computed.Duplicate,
-            submission.Correction?.Audit
+            submission.Correction?.Audit,
+            acceptance
         );
         return computed.Result;
     }

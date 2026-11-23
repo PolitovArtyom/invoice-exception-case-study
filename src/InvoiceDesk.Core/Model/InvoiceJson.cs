@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using InvoiceDesk.Core.Model.Json;
 using InvoiceDesk.Core.Model.Results;
 
@@ -28,9 +29,7 @@ public static class InvoiceJson
             },
         };
 
-    private static readonly JsonSerializerOptions InputOptions = WithDecimalConverter(
-        new InputDecimalStringConverter()
-    );
+    private static readonly JsonSerializerOptions InputOptions = CreateInputOptions();
 
     private static readonly JsonSerializerOptions ComparisonOptions = WithDecimalConverter(
         new ComparableDecimalStringConverter()
@@ -48,6 +47,32 @@ public static class InvoiceJson
     internal static bool SameValues<T>(T left, T right) =>
         JsonSerializer.Serialize(left, ComparisonOptions)
         == JsonSerializer.Serialize(right, ComparisonOptions);
+
+    private static JsonSerializerOptions CreateInputOptions()
+    {
+        var options = WithDecimalConverter(
+            new InputDecimalStringConverter(InputDecimalStringConverter.MaximumMoney)
+        );
+        var quantity = new InputDecimalStringConverter(InputDecimalStringConverter.MaximumQuantity);
+        options.TypeInfoResolver = new DefaultJsonTypeInfoResolver
+        {
+            Modifiers =
+            {
+                type =>
+                {
+                    foreach (var property in type.Properties)
+                    {
+                        if (
+                            property.PropertyType == typeof(decimal)
+                            && property.Name is "quantity" or "accepted_quantity"
+                        )
+                            property.CustomConverter = quantity;
+                    }
+                },
+            },
+        };
+        return options;
+    }
 
     private static JsonSerializerOptions WithDecimalConverter(DecimalStringConverter converter)
     {

@@ -1,3 +1,3 @@
-# Invoice Desk product vision
+# Прототип Invoice Desk
 
-Open [prototype v9](invoice-desk-prototype-v9.html) in a browser. The prototype is a self-contained simulation of the planned workspace, including case 103, a supplier-issued corrected invoice. Case 103 exists in the prototype only. For the working scope, see the [project README](../../README.md).
+Откройте [прототип v9](invoice-desk-prototype-v9.html) в браузере. Он имитирует работу с кейсами, в том числе замену счёта исправленным документом от поставщика в кейсе 103. [Работающее приложение](../../README.md)

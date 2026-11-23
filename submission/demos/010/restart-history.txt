@@ -1,3 +1,3 @@
 GET /api/cases/case-010/history (SHA-256 of the response body)
-Before Compose restart: d1929e5a975019f8bd9b63736f9cb01e8c73ee84db1b4923e6ac479d4a506a56
-After Compose restart:  d1929e5a975019f8bd9b63736f9cb01e8c73ee84db1b4923e6ac479d4a506a56
+Before Compose restart: c30e0a48c3b27a8ed13c645b3b2f39812078ff7d441d1ad50fe716708ba90939
+After Compose restart:  c30e0a48c3b27a8ed13c645b3b2f39812078ff7d441d1ad50fe716708ba90939

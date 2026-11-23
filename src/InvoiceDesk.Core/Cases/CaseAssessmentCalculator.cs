@@ -32,20 +32,13 @@ internal sealed class CaseAssessmentCalculator(
             current?.Document,
             submission.Reading
         );
-        var previousFacts = current?.ReadFacts();
-        var facts = submission.Reading?.Facts ?? submission.Correction?.Facts ?? previousFacts;
+        var facts = submission.Reading?.Facts
+            ?? submission.Correction?.Facts
+            ?? current?.ReadFacts();
         var parties = facts is null ? null : InvoiceParties.Resolve(facts, snapshot.Data);
         var import = document is null
             ? null
-            : ClassifyImport(
-                document,
-                facts!,
-                snapshot.Data,
-                parties!,
-                submission.Reading is null,
-                submission.Correction is null ? null : previousFacts,
-                current?.HasCorrectionConflict == true
-            );
+            : ClassifyImport(document, facts!, snapshot.Data, parties!, submission.Reading is null);
         var (active, duplicate, original) = HandleDuplicate(
             document,
             import,
@@ -55,16 +48,12 @@ internal sealed class CaseAssessmentCalculator(
 
         var correctedFacts = submission.Correction?.Facts
             ?? (active == current?.Document ? current?.CorrectedFacts : null);
-        bool hasCorrectionConflict = duplicate is not null
-            ? current?.HasCorrectionConflict == true
-            : import?.IsCorrectionConflict == true;
         var inputs = new RevisionInputs(
             revision,
             snapshot,
             active,
             current?.Proposals?.Items ?? [],
-            correctedFacts,
-            hasCorrectionConflict
+            correctedFacts
         );
         var activeFacts = inputs.Facts;
         var activeParties =
@@ -168,25 +157,19 @@ internal sealed class CaseAssessmentCalculator(
         InvoiceFacts facts,
         CompanyData companyData,
         InvoiceParties parties,
-        bool isReassessment,
-        InvoiceFacts? previousFacts,
-        bool hasCorrectionConflict
+        bool isReassessment
     )
     {
         if (parties.Key is not { } key)
             return null;
 
-        var earlier = repository.ReadEarlierImports(document.CaseId);
         return InvoiceImportMatch.Find(
             facts,
             key,
             companyData,
-            isReassessment
-                ? earlier.Where(item => item.Original.DocumentReference != document.Id)
-                : earlier,
+            repository.ReadEarlierImports(document.CaseId),
             isReassessment ? document.ContentSha256 : null,
-            previousFacts,
-            hasCorrectionConflict
+            isReassessment && repository.HasAccountingAssessment(document)
         );
     }
 

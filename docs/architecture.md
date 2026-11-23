@@ -1,40 +1,66 @@
-# Invoice Desk architecture
+# Архитектура Invoice Desk
 
-`InvoiceDesk.Web` serves the Vue/PrimeVue workspace, JSON page API and stateless Streamable HTTP MCP at `/mcp`. `InvoiceDesk.Adapter` is a native apphost for the assignment runner. Both call `InvoiceDesk.Core` directly. Core embeds the original JSON schemas and has a pure evaluator organized by rule family. `CaseService` handles registration, proposals, confirmations, human resolutions and reassessment. `CaseReader` shapes saved case and assessment views. `CaseRepository` stores cases in SQLite.
+## Компоненты
 
-| Table | Stored state |
+```text
+Агент ── MCP ───────┐
+                    ├─ Web ─┐
+Vue ── API карточки ┘       ├─ Core ── SQLite
+Скрипт проверки ── Adapter ─┘
+```
+
+- **Core** хранит модель, правила и операции с кейсом. Оценка получает данные счёта, снимок компании и сопоставления. Каждый результат содержит выводы проверок и основания для них.
+- **Web** отдаёт приложение Vue, API карточки и MCP по адресу `/mcp`. Он загружает доверенные файлы и проверяет ссылки на PDF. **Vue** показывает сохранённые расчёты и источники.
+- **Adapter** читает вход шага официальной проверки и выдаёт результат в JSON. Он использует те же операции Core.
+
+## Хранение
+
+| Таблица | Что хранится |
 | --- | --- |
-| Cases | Case ID, origin, date, available source references and current revision number. |
-| Documents | Internal document ID, the revision that imported it, PDF reference/hash, reading origin and original facts with the external document ID, evidence and missing reasons. |
-| CompanyDataSnapshots | Full company data with its supplied context version. |
-| Revisions | Case and revision number, action time, actor and confirmation details, document and snapshot references, all registered proposals and their first confirmations, saved result, typed corrected facts, correction audit, discrepancy acceptance, and original invoice or duplicate attempt when applicable. |
+| `Cases` | Идентификатор кейса, источники PDF и номер текущей ревизии. |
+| `Documents` | Исходное чтение счёта, цитаты, причины отсутствия полей, ссылка и хеш PDF. |
+| `CompanyDataSnapshots` | Полный снимок данных компании и его версия. |
+| `Revisions` | Действие и его автор, ссылки на документ и снимок, предложения, подтверждения, правки, попытки загрузки дубликата и результат оценки. |
 
-Facts, snapshots, source references, action and result payloads use JSON in SQLite text columns. Snapshot records hold typed company data serialized by the existing SQLite JSON conversion. A case update appends new inputs as needed, saves the result on its revision, and advances the case header in one transaction. Existing document and snapshot rows are immutable. Saved revisions may be annotated with an acceptance. An assessment is the result stored on its case revision.
+Core записывает ревизию и передвигает указатель текущей ревизии в одной транзакции. Исходные документы и снимки сохраняются для просмотра истории.
 
-The evaluator builds a shared context and runs seven document checks and five line checks. Each returns a verdict with its comparison or the reason it is waiting. Rules use `decimal`, calendar dates and enums. The JSON boundary writes the assignment’s string formats and keeps source labels on comparisons. Invoice evidence stays with the saved facts and appears on the case page. The browser renders saved results and comparisons with their sources. It lists failures and root unknowns and groups dependent unknowns by prerequisite. Core supplies the issue owner and the invoice fact sources shown in the case detail. The page presents guidance for each issue.
+## Проверки
 
-The [quantity checks](../src/InvoiceDesk.Core/Rules/Quantities) compare the invoiced quantity independently with accepted receipts and the order balance, each reduced by counted history excluding the current business key. Balances are signed. Unavailable receipts leave receipt and availability values null and produce a question for each affected line. A supplied empty receipt list gives a received quantity of zero. A unit mismatch skips the two quantity comparisons and the unit-price comparison, preserves source quantities and leaves invoice arithmetic independent.
+Названия, псевдонимы и описания строк сравниваются с полным сведением регистра по [Unicode 17.0.0](../THIRD-PARTY-NOTICES.md).
 
-The [pricing checks](../src/InvoiceDesk.Core/Rules/Pricing) use the inclusive 0.01 tolerance on the absolute unit-price difference. Arithmetic uses the invoice price and rate. Net rounds half-up to cents, tax uses the rounded net, and totals sum the rounded line amounts before exact comparisons with the declarations. The [bank check](../src/InvoiceDesk.Core/Rules/Bank) compares the invoice IBAN with the document supplier’s approved accounts.
+В кейсе 004 [UnitPriceCheck](../src/InvoiceDesk.Core/Rules/Pricing/UnitPriceCheck.cs) сравнивает цену из PDF с ценой заказа. Разница 0,02 EUR превышает допуск 0,01 EUR. Проверка сохраняет обе цены и даёт `needs_review`. Карточка показывает расчёт и источник каждой цены. [Кейс 004](../submission/demos/004/)
 
-Supplier and buyer resolution uses the document facts and directory independently from the selected order. The buyer may resolve by a unique normalized name or alias if its registration is absent. The supplier uses registration only. The matching result supplies the selected order, one-to-one line links and their provenance to the evaluator. Explicit PO references are checked first. With a missing reference, the engine searches open orders for the resolved supplier and buyer if known. An order qualifies only when every invoice line has one uncontested exact match. Deterministic links take precedence, followed by applicable confirmed proposals and then unconfirmed proposals. Order-dependent checks wait when no order is known. Proposed links let downstream checks run with a match review failure.
+| Правило | Каталог Core | Проверки |
+| --- | --- | --- |
+| R1. Стороны и валюта | [Parties](../src/InvoiceDesk.Core/Rules/Parties/) | `SupplierIdentityCheck`, `BuyerIdentityCheck`, `CurrencyMatchCheck` |
+| R2. Заказ и строки | [Matching](../src/InvoiceDesk.Core/Rules/Matching/) | `OrderMatchCheck`, `LineMatchCheck` |
+| R3. Количество | [Quantities](../src/InvoiceDesk.Core/Rules/Quantities/) | `QuantityReceivedCheck`, `QuantityOrderRemainingCheck` |
+| R4. Цена и арифметика | [Pricing](../src/InvoiceDesk.Core/Rules/Pricing/) | `UnitPriceCheck`, `LineArithmeticCheck`, `TotalsArithmeticCheck` |
+| R5. Банковский счёт | [Bank](../src/InvoiceDesk.Core/Rules/Bank/) | `BankAccountCheck` |
+| R6. Дубликат или конфликт | [Duplicates](../src/InvoiceDesk.Core/Rules/Duplicates/) | `DocumentConflictCheck`, сравнение при регистрации |
 
-Classification checks supplied history, then earlier documents whose parties and number resolve to the same business key against the current company data. The first equal record wins, even if earlier same-key records differ. A duplicate linked to a local document references that document’s latest saved assessment. An import compares with earlier records even when external IDs are reused. Reassessment excludes the active document and any corresponding counted history record. Equal facts on reassessment do not create a duplicate attempt. Duplicate attempts store the submitted reading and original reference on the revision; no second document or assessment is inserted. List, case and MCP assessment reads select the most recent revision that has a saved assessment. A duplicate-only case appears in Closed.
+## Основные потоки
 
-Web applies migrations and loads trusted first-step context and source metadata before listening. The public dataset needs a `cases` directory. A malformed manifest or first step stops startup and identifies the folder and error. Both input files must use the folder’s case ID. Validated folders with existing cases reuse their saved revisions. Its fixture facts allow-list contains cases 001–003, 005–009, 101 and 102. PDF selection is scoped to the case's declared sources and Web computes the import hash. The page serves registered document and duplicate-attempt PDFs while their saved paths exist. Case manifests can include reference PDFs for history originals, which are selected by the stored SHA-256. The adapter applies the same migrations to its own state file and takes the document hash from the runner envelope.
+1. Агент читает PDF, регистрирует значения с цитатами через MCP и при необходимости предлагает сопоставление. Сотрудник видит предварительную оценку и подтверждает предложение для текущей ревизии в карточке. Приложение сохраняет результат. Повторная проверка возвращает его, пока входы совпадают. [Кейс 010](../submission/demos/010/)
+2. Оператор кладёт полный снимок компании в `scenarios/updates/<case_id>/context.json`. Кнопка **Re-check** или вызов `assess_invoice` подхватывает изменение. Core проверяет снимок и пересчитывает текущий счёт. Старый результат доступен в истории.
+3. Adapter получает снимок, счёт, предложения и подтверждения шага. Core проверяет ссылки и сохраняет итог одной ревизией. [Контракт проверки](EVALUATION.md)
 
-MCP can open a case, register facts, propose a match, and read company data, saved history and saved assessments. The page and MCP share the re-check operation described below. A proposal validates the document, order, one-to-one links and deterministic matches. The app stores proposals in registration order and binds them to the document’s internal import revision. Confirmation is a page action against an exact proposal and the latest case revision. Preview and confirmation use the same evaluation flow, with preview computing on temporary inputs. Repeated confirmation records another action while preserving the proposal’s first confirmation order.
+## Решения
 
-Both `POST /api/cases/{caseId}/rechecks` and MCP `assess_invoice` can pick up the complete `scenarios/updates/<case_id>/context.json` snapshot. The Web host reads the operator file from its read-only mount. Core validates the entire object before writing. It compares serialized typed snapshots inside the same transaction as the append. The comparison normalizes equivalent decimal values. A changed file resolves the snapshot and saves one reassessment of the current document. An absent or equal file returns the saved result with `inputs_unchanged` when that result covers the current document, corrections, snapshot and proposals. If those inputs changed in a combined duplicate submission, re-check uses the retained snapshot and saves a new assessment. Snapshot versions are opaque labels. A change can keep the same label. History records the person or agent that requested the re-check.
+- **SQLite с данными в виде документов.** Скрипту проверки нужен автономный файл состояния в `--state-dir`. Полные снимки и результаты удобно хранить в JSON внутри SQLite.
+- **Adapter вызывает Core напрямую.** Для проверки правил не нужен веб-сервер.
+- **MCP задаёт границу агента.** Подтверждение, принятие расхождений и исправление чтения доступны сотруднику через API карточки.
+- **Внутри — типизированная модель.** Деньги и количества считаются в `decimal`. JSON используется при вводе, выводе и хранении.
+- **Одна структура результата.** Интерфейс, агент и скрипт проверки видят одни и те же решения и расчёты.
+- **Новая версия при изменении правила.** `PolicyVersion` позволяет пересчитать счёт и сохранить прежний результат в истории. [Репетиция изменения](../submission/rule-change-rehearsal.md)
 
-The list API returns each row’s tab and the counts for Needs attention, Ready for accounting and Closed. Unread cases appear in Needs attention. A duplicate-only case is Closed. A duplicate attempt keeps the previous assessment available. Clear results and eligible discrepancies with a current acceptance move to Ready for accounting and show the assessed revision and simulated handover. Handover leaves invoice history and quantity capacity untouched.
+## Толкования правил
 
-The page accepts eligible discrepancies through `POST /api/cases/{caseId}/discrepancy-acceptances`. Core checks that the form names the current revision and assessment, the assessed inputs still apply, and no unconfirmed proposal is used. Acceptance is saved on the current revision with the person, reason, time and assessment ID. Any new revision ends its effect. The rules result is immutable, so the underlying decision and check failures are still visible under Ready for accounting.
-
-The page corrects parsed facts through `POST /api/cases/{caseId}/fact-corrections`. Core supplies eligibility and editable fields, checks the expected revision and validates the full corrected reading. The revision stores the complete typed corrected facts alongside the old and new values and audit details. The original document row, PDF and citations are preserved. R6 compares the effective readings of other documents. When a correction introduces a match with a different record, the assessment blocks and references that record. Later reassessments retain the conflict while an equal original remains. Case 102 exercises the correction path from the startup fixture through Ready for accounting.
-
-The adapter prepares company data, the import and its R6 disposition, proposed matches and confirmations in temporary state. It validates same-step references before saving a single revision and its final assessment. The page history reads saved revisions, their source facts, company-data snapshots and results at `/api/cases/{caseId}/revisions/{number}`. MCP still resolves saved assessments by assessment ID. Earlier revisions render with a superseded marker and a link to the current case. See the [stage plan](plan.md) for delivery order.
-
-The stage 05 demos use Claude Code in print mode from a directory containing only a copied PDF. The enforced tool list is Read and the seven invoice MCP tools. Claude sends the facts and proposal as JSON objects, which Core validates against the shipped schemas. The browser records human confirmation against the latest revision. The subsequent MCP re-check returns that saved result when inputs are unchanged. The submission retains the [client setup and transcripts](../submission/demos/) and the separate [extraction comparison](../submission/extraction/).
-
-The adapter's Docker SDK build restores dependencies and publishes the complete self-contained folder for the selected runtime identifier, using package versions pinned centrally. The native SQLite library ships with each target. The runtime image uses the matching Linux architecture. The Docker launcher binds only the state directory at its resolved absolute path, keeps files host-writable and runs each step offline. A Python container can run the unchanged evaluator against the exported Linux x64 adapter. For platform evidence and entry points, see the [README](../README.md#export-and-evaluate-the-portable-adapter).
+- Счёт относится к одному заказу, строка — к одной позиции. Спорные строки считаются нерешёнными до подтверждения. Явный номер может указать на закрытый заказ. Без номера автоматически выбирается только единственный открытый заказ с полным точным совпадением.
+- За раз применяется одно предложение для текущей регистрации, заказа и строк. Точные автоматические связи имеют приоритет. Из применимых предложений выбирается то, которое впервые подтвердили позже остальных, или последнее применимое, если подтверждений ещё нет.
+- Предел количеств — 1 000 000 000, цен и сумм — 10 000 000 000 000.
+- При одном ключе совпадающие факты дают дубликат со ссылкой на первый такой счёт, разные — конфликт со ссылкой на самый ранний счёт. История хранит чтение дубликата, а оценка и учтённые счета сохраняются. Адаптер сохраняет новый допустимый снимок для следующей проверки.
+- При перепроверке пропускаются копии в том же кейсе с одинаковым внешним ID и SHA-256. Учтённая запись с теми же ID и SHA-256 пропускается, только если по этому документу в кейсе уже был `clear` или принято расхождение. Совпадение с другой записью блокирует оценку со ссылкой на неё.
+- MCP требует зарегистрированный PDF, цитату для каждого напечатанного значения и причину для каждого `null`. Адаптер принимает факты и хеш по опубликованной схеме, которая допускает `null` без причины.
+- Адаптер опускает необязательное поле `evidence_refs`.
+- Принять расхождение можно и для счёта с несовпадающими единицами, по которому количество и цена не сравнивались (`not_applicable`): это решение сотрудника с указанной причиной, оно видно в истории.

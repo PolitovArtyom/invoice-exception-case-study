@@ -94,10 +94,14 @@ public static class IntakeValidation
                 );
         }
 
+        var printedFields = requireCompleteReading
+            ? JsonFields.Leaves(json, "").Where(field => IsPrintedFact(field.Path)).ToArray()
+            : [];
         if (
-            requireCompleteReading
-            && NullFields(json, "").FirstOrDefault(path => !missingPaths.Contains(path))
-                is { } fieldWithoutReason
+            printedFields
+                .FirstOrDefault(field => field.Value is null && !missingPaths.Contains(field.Path))
+                .Path is
+            { } fieldWithoutReason
         )
             throw new InvoiceValidationException(
                 prefix + fieldWithoutReason,
@@ -123,7 +127,29 @@ public static class IntakeValidation
                     "Must reference a printed invoice field."
                 );
         }
+
+        if (requireCompleteReading)
+        {
+            var citedPaths = facts
+                .Evidence.Select(evidence => evidence.FieldPath)
+                .ToHashSet(StringComparer.Ordinal);
+            var uncitedFacts = printedFields
+                .Where(field => field.Value is not null && !citedPaths.Contains(field.Path))
+                .Select(field => new ValidationDetail(
+                    prefix + field.Path,
+                    "A printed invoice field requires a page and excerpt."
+                ))
+                .ToArray();
+            if (uncitedFacts.Length > 0)
+                throw new InvoiceValidationException(uncitedFacts);
+        }
     }
+
+    private static bool IsPrintedFact(string path) =>
+        path is not ("/schema_version" or "/document_id")
+        && !path.EndsWith("/line_id", StringComparison.Ordinal)
+        && !path.StartsWith("/evidence/", StringComparison.Ordinal)
+        && !path.StartsWith("/missing_fields/", StringComparison.Ordinal);
 
     private static void ValidateCode(string? value, int length, string path, string message)
     {
@@ -165,7 +191,7 @@ public static class IntakeValidation
         catch (AmountLimitException error)
         {
             throw UnsupportedInvoiceCaseException.AmountAboveLimit(
-                InputDecimalStringConverter.MaximumSupportedMagnitude,
+                error.Maximum,
                 Pointer(error, prefix)
             );
         }
@@ -183,19 +209,6 @@ public static class IntakeValidation
         );
         return prefix + string.Concat(fields.Select(field => "/" + JsonFields.Escape(field)));
     }
-
-    private static IEnumerable<string> NullFields(JsonNode? node, string path) =>
-        node switch
-        {
-            JsonObject obj => obj.SelectMany(field =>
-                NullFields(field.Value, path + "/" + JsonFields.Escape(field.Key))
-            ),
-            JsonArray array => array.SelectMany(
-                (value, index) => NullFields(value, $"{path}/{index}")
-            ),
-            null => [path],
-            _ => [],
-        };
 
     private static void RequireUnique(IEnumerable<string> values, string path, string label)
     {

@@ -73,7 +73,15 @@ function actionLabel(action: RevisionView['action']) {
               {{ new Date(revision.action.recorded_at).toLocaleString() }}
             </time>
           </p>
-          <p v-if="revision.acceptance">
+          <p
+            v-if="
+              revision.acceptance &&
+              (revision.acceptance.assessment_id !==
+                revisions[index + 1]?.acceptance?.assessment_id ||
+                revision.acceptance.recorded_at !==
+                  revisions[index + 1]?.acceptance?.recorded_at)
+            "
+          >
             {{ revision.acceptance.person }} accepted the discrepancy in
             assessment {{ revision.acceptance.assessment_id }}.
             <q>{{ revision.acceptance.reason }}</q>

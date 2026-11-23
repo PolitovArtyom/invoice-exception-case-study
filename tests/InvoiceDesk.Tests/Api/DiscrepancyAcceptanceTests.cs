@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using InvoiceDesk.Core.Model;
 using InvoiceDesk.Tests.Support;
 using ModelContextProtocol.Client;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
@@ -58,19 +59,80 @@ public sealed class DiscrepancyAcceptanceTests
         AssertSameJson(history, await Read(page, CaseUrl + "/history"));
 
         AssertDuplicate(await RegisterPublicReading(mcp, CaseId), "DOC-004", "DOC-004", "2", 3);
-        var freshAcceptance = await Accept(page, 3, "2");
-        Assert.Equal("accepted_with_discrepancy", Text(freshAcceptance, "stage"));
-        AssertAcceptance(freshAcceptance["acceptance"], "2");
-        AssertSameJson(result, freshAcceptance["revision"]!["result"]);
+        var afterImport = await Read(page, CaseUrl);
+        Assert.Equal(3, afterImport["current_revision"]!.GetValue<int>());
+        Assert.Equal("accepted_with_discrepancy", Text(afterImport, "stage"));
+        Assert.False(afterImport["can_accept"]!.GetValue<bool>());
+        AssertSameJson(accepted["acceptance"], afterImport["acceptance"]);
+        AssertSameJson(result, afterImport["revision"]!["result"]);
         var afterDuplicate = (await Read(page, CaseUrl + "/history")).AsArray();
-        AssertSameJson(freshAcceptance["acceptance"], afterDuplicate[0]!["acceptance"]);
+        AssertSameJson(accepted["acceptance"], afterDuplicate[0]!["acceptance"]);
         Assert.Null(afterDuplicate[0]!["result"]);
         AssertSameJson(history[0], afterDuplicate[1]);
         var duplicateView = await Read(page, CaseUrl + "/revisions/3");
         Assert.True(duplicateView["show_duplicate_reading"]!.GetValue<bool>());
         Assert.False(duplicateView["can_correct"]!.GetValue<bool>());
-        AssertSameJson(freshAcceptance["acceptance"], duplicateView["acceptance"]);
+        AssertSameJson(accepted["acceptance"], duplicateView["acceptance"]);
         Assert.Null(duplicateView["revision"]!["result"]);
+    }
+
+    [Fact]
+    public async Task Should_skip_own_counted_record_when_a_prior_assessment_was_accepted()
+    {
+        var baseline = MatchedInvoiceScenario.Baseline();
+        var orderLine = baseline.CompanyData.PurchaseOrders.Orders[0].Lines[0];
+        var scenario = baseline.WithOrderLines(orderLine with { UnitNetPrice = 9.98m });
+        await using var test = await ProposalCase.Start(scenario);
+        AssertOutcome(
+            test.Initial,
+            "needs_review",
+            "D",
+            ["L"],
+            [new("UNIT_PRICE", "L", "fail", "needs_review")]
+        );
+
+        using var accepted = await SendAcceptance(
+            test.Page,
+            ProposalCase.CaseId,
+            2,
+            "2",
+            Person,
+            Reason
+        );
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        var view = await Read(test.Page, ProposalCase.CaseUrl);
+        Assert.Equal("accepted_with_discrepancy", Text(view, "stage"));
+        string contentSha256 = Text(view["revision"]!["document"]!, "content_sha256")!;
+        var counted = scenario.WithCountedInvoice(scenario.Facts, "D").CompanyData;
+        test.WriteCompanyDataUpdate(
+            InvoiceJson.Write(
+                counted with
+                {
+                    ContextVersion = "CTX-COUNTED",
+                    InvoiceHistory = counted.InvoiceHistory with
+                    {
+                        Documents =
+                        [
+                            counted.InvoiceHistory.Documents[0] with
+                            {
+                                ContentSha256 = contentSha256,
+                            },
+                        ],
+                    },
+                }
+            )
+        );
+        using var response = await Recheck(test.Page, ProposalCase.CaseId);
+        response.EnsureSuccessStatusCode();
+        var reassessed = await Body(response);
+        Assert.Equal("3", Text(reassessed, "assessment_id"));
+        AssertOutcome(
+            reassessed["result"]!,
+            "needs_review",
+            "D",
+            ["L"],
+            [new("UNIT_PRICE", "L", "fail", "needs_review")]
+        );
     }
 
     [Theory]
@@ -184,8 +246,7 @@ public sealed class DiscrepancyAcceptanceTests
     [InlineData("proposal", "2", 3)]
     [InlineData("confirmation", "3", 4)]
     [InlineData("correction", "2", 3)]
-    [InlineData("duplicate", "2", 3)]
-    public async Task Should_expire_acceptance_when_any_new_revision_is_created(
+    public async Task Should_expire_acceptance_when_a_new_assessment_is_saved(
         string action,
         string assessment,
         int nextRevision
@@ -241,11 +302,6 @@ public sealed class DiscrepancyAcceptanceTests
                     "Bank transfer"
                 )
             ),
-            ["duplicate"] = (unchanged, async () =>
-            {
-                var duplicate = await RegisterPublicReading(mcp, CaseId);
-                AssertDuplicate(duplicate, "DOC-004", "DOC-004", "2", 3);
-            }),
         };
         var (prepare, update) = actions[action];
         await prepare();

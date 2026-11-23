@@ -1,42 +1,44 @@
 # Invoice Desk
 
-Invoice Desk checks an invoice against a saved company-data snapshot and shows the decision and its supporting calculations. An agent reads the PDF and submits printed facts with evidence. The application evaluates those facts using the assignment's `core-v1` rules.
+Агент читает PDF-счета. Приложение показывает результаты сверки, расчёты, источники и историю.
 
-| Scope | Delivery |
-| --- | --- |
-| Built | An MCP server receives invoice facts with PDF citations. Claude Code is the demo client. The app applies R1–R6, stores assessments in SQLite and shows their calculations and sources. The workspace records human match confirmation and discrepancy acceptance, corrects misread PDF values, and can re-check with a new company-data snapshot. It groups cases into Needs attention, Ready for accounting and Closed. The Linux x64 export and the Docker fallback each pass ten public cases and twelve steps. |
-| Described only | Accounting handover and counted feedback, receipt-triggered re-check, and the production controls below. |
-| Prototype only | The [simulated workspace](submission/prototype/) shows supplier-corrected invoices and case 103. When a re-import changes the facts used to compare invoices, the app reports a conflict. |
+[Репозиторий решения](https://github.com/PolitovArtyom/invoice-exception-case-study)
 
-## Architecture
+Исходный текст задания — в [первой версии README](https://github.com/PolitovArtyom/invoice-exception-case-study/blob/a262971e64e5a412da7cae771308aee32f7281c1/README.md).
 
-Core applies the deterministic `core-v1` rules. SQLite stores invoice facts, company-data snapshots, revisions and assessments. The MCP server and workspace use the same case operations, and the command-line adapter calls Core directly. Startup imports fixture facts only for explicitly listed cases. [Architecture and data flow](docs/architecture.md)
+Форк отвязан. Исходные коммиты сохранены.
 
-## Run the workspace with Docker
+[Запуск](#запуск) · [Решение](#решение) · [Отчёт](#отчёт) · [Ответы на вопросы](#ответы-на-вопросы)
 
-Install Docker with the Compose plugin. From the repository root:
+## Запуск
+
+Нужны Docker Engine или Docker Desktop, Compose v2+ и Buildx. Запускайте из корня репозитория. На одном Docker-демоне проверяйте по очереди из-за тегов `invoice-desk:local` и `invoice-adapter:local`.
 
 ```sh
 docker compose up --build --wait
+```
+
+```sh
 docker compose exec -T app curl -fsS http://127.0.0.1:8080/health
 ```
 
-The health response is `{"status":"ok"}` after migrations and case loading. Open [the workspace](http://127.0.0.1:8080/) or [case 001](http://127.0.0.1:8080/cases/case-001). The app binds to loopback. Set `INVOICE_PORT` to change the host port and update any client URL to match. The container port stays 8080.
+При `{"status":"ok"}` кейсы доступны локально. [Список кейсов](http://127.0.0.1:8080/) · [Карточка кейса 001](http://127.0.0.1:8080/cases/case-001) · [MCP по Streamable HTTP](http://127.0.0.1:8080/mcp)
 
-Cases 001–003, 005–009, 101 and 102 start with fixture facts and are labelled as test data. Cases 004 and 010 start with company data and a PDF source for the agent. The read-only mounts under `dataset` and `scenarios` hold those inputs. For a new scenario, use the same case ID in the folder name, the case manifest and the first step. The loader ignores runner expectations and imports first-step facts only for the explicit fixture allow-list.
+### Подключение агента
 
-Restart and wait for readiness without clearing the SQLite volume:
+Claude Code загружает [.mcp.json](.mcp.json) из корня репозитория.
 
-```sh
-docker compose restart app
-docker compose up --wait
+```json
+{
+  "mcpServers": {
+    "invoice": { "type": "http", "url": "http://127.0.0.1:8080/mcp" }
+  }
+}
 ```
 
-`docker compose down` stops the app and keeps the volume. `docker compose down --volumes` deletes this project's saved cases, assessments and human actions. Run the startup command again to reload the initial cases.
+Codex использует [.codex/config.toml](.codex/config.toml). Запустите клиент из корня. При запросе подтвердите доверие к проекту и подключение `invoice`. Доступ к модели нужен только клиенту.
 
-### Connect an agent
-
-The loopback MCP endpoint is `http://127.0.0.1:8080/mcp` (Streamable HTTP). Verify the available tools using the running container:
+Если меняете порт хоста через `INVOICE_PORT`, обновите настройки клиента и `INVOICE_BASE_URL` для демо (по умолчанию `http://127.0.0.1:8080`).
 
 ```sh
 docker compose exec -T app curl -fsS http://127.0.0.1:8080/mcp \
@@ -44,53 +46,26 @@ docker compose exec -T app curl -fsS http://127.0.0.1:8080/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-Project transport settings are in [Claude Code's .mcp.json](.mcp.json) and [Codex's config.toml](.codex/config.toml). For normal use, start the client at the repository root, trust this project and approve the invoice tool calls. The app requires no LLM provider key. Your client needs its own model access. `open_case` supplies the extraction schema and PDF references. `host_path` is relative to the checkout. `container_path` lives inside the app container. `register_invoice` takes the case's source root and relative path, computes the PDF hash server-side and saves printed facts with excerpts, pages and explicit missing reasons.
+[Порядок регистрации счёта через MCP](submission/rehearsal.md).
 
-The [recorded Claude Code setup](submission/demos/) starts from an isolated PDF directory with strict MCP configuration and permissions for exactly seven invoice tools plus PDF reading. It produced the live tool calls for both demos.
-
-### See the demos
-
-- [Case 004](submission/demos/004/) stays `needs_review` for L01's price variance regardless of the approval claim in the PDF because Core computes the decision, MCP exposes no confirmation or decision tool, and match confirmation goes through the case page.
-- [Case 010](submission/demos/010/) first asks which order applies. Claude proposes the order, then proposes the L01 link after the app asks about that line. A scripted Playwright browser acting as the AP clerk submitted the case-page confirmation as `Demo AP Clerk` 25.6 seconds after the L01 proposal. The script only operated the form. The re-check returned saved assessment 5, the fourth assessment, with `inputs_unchanged: true` and created no new revision. L02 stayed deterministic.
-- The [extraction comparison](submission/extraction/) found zero value differences after removing IBAN spaces. The IBAN differs as text in both cases because the readings kept the printed spaces and the reference omits them.
-
-### Re-check when company data changes
-
-Open [case 101](http://127.0.0.1:8080/cases/case-101) on a fresh volume. The invoice starts blocked because the receipt directory is available and empty. Press **Re-check with the latest company data**. The update supplied with the case records receipt of 60 units. Revision 2 becomes clear and the case moves to Ready for accounting. In History, open Revision 1 to read the blocked assessment and its snapshot. The same invoice facts and PDF are used in both revisions.
-
-For any case with saved invoice facts, place a complete replacement snapshot at `scenarios/updates/<case_id>/context.json` on the host. The page action and MCP `assess_invoice` pick it up while the app is running. Re-check compares typed snapshot values. Whitespace, property order and equivalent decimal spellings are treated alike. Array order and the version label are significant. A missing or equal file returns the saved assessment with `inputs_unchanged: true` when it still covers the current inputs. If a combined duplicate submission retained changed inputs, re-check assesses them using the existing snapshot. An invalid file identifies the failing field and leaves history intact.
-
-A clear result or an active discrepancy acceptance enters Ready for accounting. The page shows the assessed revision and snapshot version. Handover is simulated. Counted invoice quantities come from the supplied company data.
-
-### Resolve an invoice on the case page
-
-- Register the reading for [case 004](submission/demos/004/) over MCP and open the case page. If the buyer and supplier agreed to the unit price difference, choose **Accept discrepancy** and enter your name and reason. The invoice appears in Ready for accounting with your acceptance, while its saved rules decision stays `needs_review`. Any later revision ends the acceptance. History keeps the person, reason, time and accepted assessment.
-- Open [case 102](http://127.0.0.1:8080/cases/case-102) on a fresh volume. Under **Needs attention**, find line L02's unit net price, read as `64.00` beside the quote “6.40”. Choose **Correct value**, enter `6.40`, your name and your reason. A new assessment is clear. The same invoice PDF and the earlier blocked assessment remain available. For a nullable value, choose a separate missing reason when marking it missing.
-
-Correction changes the reading of the same PDF. Core excludes the active document from its own conflict comparison. If a correction makes the reading match a different recorded invoice, the new assessment blocks and references that invoice. Re-importing follows the usual duplicate or conflict rules. Company data is updated through its source files and a re-check.
-
-## Export and evaluate the portable adapter
-
-Apple Silicon is the primary macOS target. Check your OS and architecture with `uname -s` and `uname -m`. Choose `osx-arm64` for Apple Silicon or `osx-x64` for Intel. The Linux builds require glibc. Use `linux-arm64` for aarch64/arm64 and `linux-x64` for x86_64. The Windows build is `win-x64`.
+### Проверка экспорта Linux x64 в Docker
 
 ```sh
-RID=osx-arm64
+RID=linux-x64
 docker build -f Dockerfile.adapter --target export --build-arg RID="$RID" \
   --output "type=local,dest=dist/$RID" .
 ```
 
-Keep the entire directory together, including the native SQLite library. Restore executable permission with `chmod +x "dist/$RID/InvoiceDesk.Adapter"` if it was lost in copying. On macOS run `codesign --verify --verbose "dist/$RID/InvoiceDesk.Adapter"`. The SDK's default ad-hoc signature is preserved. For local apphost signature repair, use `codesign --force --sign - "dist/$RID/InvoiceDesk.Adapter"`. Ad-hoc signing carries no notarization. Both macOS exports and their signature metadata were inspected on Linux.
+Python и [зависимости](requirements.txt) устанавливаются в контейнере.
 
-### Evaluate the Linux x64 export with Docker
-
-The assignment's official runner is the Python 3 script `tools/run_evals.py`. Export `linux-x64` as above. The command below runs the unchanged script against those exported files with Python and its [dependencies](requirements.txt) inside the container.
-
-```sh
+```bash
+checkout=$(pwd -P)
+mount_checkout=${checkout//\"/\"\"}
 mkdir -p results/local/exported
 docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
-  --mount "type=bind,\"src=$(pwd -P)\",dst=/workspace,readonly" \
-  --mount "type=bind,\"src=$(pwd -P)/results/local/exported\",dst=/reports" \
-  --workdir /workspace python:3.12-bookworm sh -ec '
+  --mount "type=bind,\"src=$mount_checkout\",\"dst=$mount_checkout\",readonly" \
+  --mount "type=bind,\"src=$mount_checkout/results/local/exported\",dst=/reports" \
+  --workdir "$checkout" python:3.12-bookworm sh -ec '
     python -m venv /tmp/evaluation
     /tmp/evaluation/bin/pip install --no-cache-dir -r requirements.txt
     /tmp/evaluation/bin/python tools/run_evals.py \
@@ -98,79 +73,167 @@ docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" \
   '
 ```
 
-The runner creates fresh SQLite state for each case. It writes the reports to `results/local/exported/`. The adapter prints one JSON result per step. For invalid input it prints a JSON validation error and exits with code 2. [Public runner contract](docs/EVALUATION.md)
+[Контракт проверки](docs/EVALUATION.md)
 
-### Use the Docker fallback with host Python
+### Запуск через Docker вместо экспорта
 
-Run from the repository root with Python 3 and `venv`. Build the image before starting the runner.
+Для `./scripts/adapter-docker` нужны Docker, Bash и Python 3 с `venv` на хосте.
 
 ```sh
-docker build -f Dockerfile.adapter --target runtime -t invoice-adapter:local .
+docker build --load -f Dockerfile.adapter --target runtime -t invoice-adapter:local .
+```
+
+```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python tools/run_evals.py --adapter './scripts/adapter-docker' \
   --report-dir 'results/local/docker fallback'
 ```
 
-Use Bash and a local Docker daemon that can bind-mount the runner's state path. The launcher resolves relative paths from the runner's working directory, runs as the host UID/GID and starts each step with no network. It uses the prepared image and preserves the adapter exit status. [Measured public runs](submission/runner/public/) · [API test map and timing](submission/tests/)
+<details>
+<summary>Экспорт для других платформ и подпись macOS</summary>
 
-## Where the rules live
+Выберите RID по `uname -s` и `uname -m`. [Проверенные платформы](submission/runner/public/)
 
-| Rule | Core checks |
-| --- | --- |
-| R1 Parties and currency | [SupplierIdentityCheck, BuyerIdentityCheck, CurrencyMatchCheck](src/InvoiceDesk.Core/Rules/Parties/) |
-| R2 Order and line matching | [OrderMatchCheck, LineMatchCheck](src/InvoiceDesk.Core/Rules/Matching/) |
-| R3 Quantity | [QuantityReceivedCheck, QuantityOrderRemainingCheck](src/InvoiceDesk.Core/Rules/Quantities/) |
-| R4 Price and arithmetic | [UnitPriceCheck, LineArithmeticCheck, TotalsArithmeticCheck](src/InvoiceDesk.Core/Rules/Pricing/) |
-| R5 Bank account | [BankAccountCheck](src/InvoiceDesk.Core/Rules/Bank/BankAccountCheck.cs) |
-| R6 Duplicate or conflict | [DocumentConflictCheck and import comparison](src/InvoiceDesk.Core/Rules/Duplicates/) |
+```sh
+RID=osx-arm64
+docker build -f Dockerfile.adapter --target export --build-arg RID="$RID" \
+  --output "type=local,dest=dist/$RID" .
+```
 
-## Accounts payable pilot
+Храните экспорт с библиотекой SQLite. Право на запуск восстанавливает `chmod +x "dist/$RID/InvoiceDesk.Adapter"`. Проверка подписи macOS — `codesign --verify --verbose "dist/$RID/InvoiceDesk.Adapter"`. Локальная переподпись — `codesign --force --sign - "dist/$RID/InvoiceDesk.Adapter"`.
 
-### Which manual work improves, and how would we measure the benefit?
+</details>
 
-The workspace reduces manual transcription from PDF, repeated comparisons against purchase orders, accepted receipts and prior counted invoices, and the search for a reason to route a case. A pilot would compare hands-on time per invoice and time to resolve an exception against the current workflow. Sample both clear and escalated invoices for critical-field reading accuracy, false clears and avoidable escalations. Track the percentage that reaches accounting without re-entry, along with cases reopened after new data. The exercises used synthetic invoices. AP savings have yet to be measured.
+### Данные и перезапуск
 
-- The Linux x64 export and Docker fallback each passed 10/10 cases and 12/12 steps. Their slowest steps took 5.036 s and 4.974 s respectively. [Public runner reports](submission/runner/public/)
-- All 69 quoted excerpts were found on their cited pages, and no reference-cited field lacked a citation. [Extraction results](submission/extraction/)
-- The backend suite, including the API tests, passed 216 tests in 18.81 s wall time. [Test map and timing](submission/tests/)
+Агент читает PDF в 004 и 010. Остальные встроенные кейсы используют тестовое чтение. В `scenarios/cases/<case_id>/` добавьте `case.json`, шаг со снимком компании в `steps/` и PDF в `documents/`. Идентификатор папки, манифеста и первого шага должен совпадать. Перезапустите приложение.
 
-### Which dependencies and risks need clarification before rollout?
+Перезапуск с сохранением SQLite
 
-Procurement needs to supply approved PO amendments and own price, item and order exceptions. The supplier master needs stable IDs and a separate bank-change verification process using independently established contact details. Receiving owns acceptance evidence and timely posting. AP coordinates exceptions and suppliers. Accounting needs to agree when an invoice is handed over, posted and counted, and return the document reference and counting state. Stale receipts, amended prices, bank records or invoice history can change the result after an earlier assessment. Before production, agree freshness and ownership at handover and re-check before payment release. Production work also includes access controls, concurrent updates, retries and recovery, retention, monitoring, and policy for broader invoice types such as credit notes and progress billing.
+```sh
+docker compose restart app
+docker compose up --wait
+```
 
-### Which three improvements should come next, and in what order?
+`docker compose down` сохраняет SQLite. Для повтора демо с первой регистрации сбросьте том через `docker compose down --volumes`.
 
-| Improvement | Benefit | Dependency | Verification |
-| --- | --- | --- | --- |
-| 1. Accounting handover with counted feedback | Reduce re-entry and keep available quantities current. | Agree handover eligibility, posting ownership, accounting identifiers and the event that means counted. | Reconcile each handover to one accounting document, replay feedback safely and verify that the next invoice sees the counted quantity. |
-| 2. Controlled supplier-corrected invoices | Resolve actual document errors while preserving the original and its history. | Agree that replacement stops as soon as a clear result or acceptance makes the case ready for accounting, even before handover. Agree when accounting requires a credit or adjustment. | Run a case 103-style correction and verify that both versions remain traceable and the new version is checked. Verify that clear and accepted cases both reject replacement before handover, and that handed-over or counted invoices also reject it. |
-| 3. Re-check on receipt events | Reassess invoices waiting for newly posted receipts with less manual work. | Receive reliable acceptance events with stable PO line IDs and the refreshed snapshot. | Reproduce the case 101 transition after a receipt event and confirm that replay leaves history unchanged. |
+## Решение
 
-Owner's active time **[owner to fill in]**
+### Концепция
 
-## Limitations
+**Главное противоречие.** Мы хотим автоматизировать обработку счетов. Прочитать PDF-счёт автоматически сегодня может только недетерминированная система — ИИ-агент. А результат нужен детерминированный: это финансы и сверка, «скорее всего правильно» здесь не годится. Из этого противоречия и вытекает устройство решения.
 
-- Native macOS and Linux arm64 execution remain unverified. Windows is unsupported.
-- The app has no authentication or production controls for concurrent updates, retries or recovery. Production agent credentials need to be separate from credentials for human page actions.
+**Как мы его решаем.**
+- Агент только читает: переносит данные из PDF в структуру и к каждому значению прикладывает цитату со страницы. Решений он не принимает — у него нет такого инструмента.
+- Решают детерминированные правила `core-v1`. Одни и те же проверки работают для агента, страницы и скрипта проверки, результат воспроизводим и объясним.
+- Первое требование — никаких ложных «всё в порядке». Если данных не хватает или что-то не сходится, счёт не проходит дальше, а получает вопрос или блокировку.
+- Мы признаём, что полностью автоматизировать это нельзя: случаи, где нужен человек, будут всегда. Поэтому вторая цель — чтобы вмешательство человека было удобным и быстрым. Он видит, что с чем сравнили, цитату из PDF и подсказку, кому передать вопрос, и в один шаг подтверждает сопоставление, принимает расхождение с причиной или исправляет ошибку чтения.
+- Ничего не перезаписывается: каждое действие — новая ревизия, и видно, на каких данных и по какой версии правил принято решение.
 
-### Simplifications
+**Куда идём.** Цель — чтобы ручных случаев становилось всё меньше. Для этого решение нужно запустить в работу и собирать данные: какие исключения возникают, где агент ошибается в чтении, какие расхождения люди принимают и почему. По этим данным дорабатываем агента, правила и подсказки, пока вмешательство человека не станет редкостью.
 
-Each input quantity, price and amount is limited to 1,000,000,000 in invoice facts and company data. Larger values return an unsupported-input error naming the field and leave saved state unchanged.
+Следующий шаг — подключать системы компании по одной. Подробнее — в ответе на второй вопрос.
 
-Identifiers are trimmed and uppercased while retaining separators and leading zeros. Names and descriptions are trimmed, internal whitespace collapses to one space, and casing uses `ToLowerInvariant()`. IBAN comparison removes whitespace and uppercases. Supplier lookup uses registration only. Buyer lookup uses a unique legal name or alias when registration is absent. Order-relative identity and the document supplier’s bank check are independent.
+Что ещё может уменьшить ручную работу: запоминать подтверждённые людьми сопоставления как псевдонимы позиций поставщика, чтобы следующий такой счёт проходил сам; принимать структурированные электронные счета там, где поставщики их поддерживают, — тогда чтение ИИ не нужно; проверять цитаты на странице PDF уже при приёме счёта; согласовать с финансами допуски для мелких расхождений.
 
-A business key is the resolved document supplier and buyer plus the normalized invoice number. The app checks every same-key record in supplied invoice history first, then earlier case imports. It resolves earlier imports with their latest saved reading against the current company data. It picks the first equal record as the original of a duplicate, or the first record for a conflict if all differ. Equality compares dates, currency, PO reference, IBAN, declared totals, and normalized line tuples as a multiset with exact decimal comparison. It ignores file/hash, descriptions, payment terms and line IDs/order. The supplied history format carries no payment terms. A changed re-import is assessed as a conflict and both versions remain available. Reassessing the active invoice saves a fresh assessment and excludes that version from its own conflict comparison. An equal history record arriving through a context update does not turn the active invoice into a duplicate. A duplicate advances history with its PDF reference, keeps the previous assessment current and ends any prior human acceptance. A case with only a duplicate is Closed. When a runner step supplies company data with a duplicate, the new snapshot is retained for a later assessment. If those inputs changed, the previous result remains visible and the case requires attention before accounting.
+### Архитектурные решения
 
-An explicit PO reference can select a closed order. With an absent reference, automatic selection requires one open order for the resolved supplier and buyer (if resolved) with a distinct exact match for every line. An unknown printed reference needs a proposal. Exact line matches use SKU, description or an explicit alias; all lines in a contested match stay unresolved automatically.
+- **Без лишних слоёв.** Приложение небольшое, поэтому я не делил его на компоненты и слои: одно ядро `InvoiceDesk.Core`, веб-хост с MCP и страницей, адаптер для скрипта проверки. Усложнять здесь незачем.
+- **Правила выделены отдельно.** Каждая проверка — небольшой класс в папке своего семейства R1–R6. Правила со временем точно будут меняться, и менять их надо в одном понятном месте.
+- **Простое хранилище.** Для этих задач лучше подошла бы документная база. Для демонстрации и тестов SQLite используется как документное хранилище: данные в JSON, записи только добавляются. Скрипту проверки к тому же нужно состояние в файле внутри `--state-dir`.
+- **Разработка через API-тесты.** Каждый покрытый сценарий проверяется обязательным API-тестом через MCP и API страницы — через них и шла разработка. Юнит-тесты только там, где они действительно нужны: расчёты.
+- **Граница агента.** Агент через MCP читает, регистрирует факты и предлагает сопоставление. Подтвердить, принять расхождение, исправить значение и изменить данные компании может только человек на странице.
+- **Одно ядро для всех входов.** Агент, страница и адаптер вызывают одни и те же проверки, поэтому результат везде одинаковый. Данные компании — версионированные снимки, а в каждой оценке записана версия правил.
+- **Принятие расхождения и исправление прочитанного значения — осознанное расширение.** Задание требует только подтвердить сопоставление и перепроверить счёт по новым данным. Без этих двух действий решение было бы заметно проще: принятие вводит отдельное правило перехода в «Ready for accounting», исправление — дополнительную перепроверку дублей в R6. Но в реальной работе без них не обойтись: сотрудник должен уметь закрыть обоснованное расхождение и поправить ошибку чтения. Возможно, я переусложнил. Правильнее было бы сначала проверить это с практиком, но доступа к такой экспертизе у меня нет, поэтому решил попробовать так.
 
-Deterministic links take priority. Confirmed proposals outrank unconfirmed proposals. The proposal most recently confirmed for the first time wins, followed by the most recently registered applicable unconfirmed proposal. Repeat submissions advance the revision. Repeating a proposal on the same import keeps its precedence. Repeating it after a changed re-import binds it to the new reading as an unconfirmed proposal. Reusing a proposal ID with different content is a validation error. A proposal is bound to its imported document and ceases to apply when its order or a referenced line disappears from the snapshot. A runner step can record confirmation while the proposal is unavailable. When the references return, that confirmation can apply again.
+[Архитектура](docs/architecture.md) · [Где лежат правила R1–R6](docs/architecture.md#проверки) · [Правила задания](docs/BUSINESS_RULES.md)
 
-A unit mismatch retains quantities in their source units. The two quantity comparisons and unit-price comparison are skipped for that line, and invoice arithmetic still runs.
+### Упрощения
 
-A combined duplicate step keeps other valid supplied inputs and returns the duplicate with no assessment. Changed inputs require reassessment before accounting. A case with only a duplicate can take a later context-only step and retain its duplicate disposition. Proposal validation requires a registered active document.
+- **Ready for accounting** только имитирует передачу в бухгалтерию.
+- **Интерфейс пока перегружен.** Карточка пытается ответить на все возможные вопросы сразу. Подозреваю, что на практике две трети этого никому не понадобится. Правильный шаг — показать его человеку, который уже делает эту работу, и вместе с ним быстро всё подрезать и привести к удобному для него виду. Такого человека у меня пока нет, поэтому интерфейс оставлен с запасом.
+- **Это тестовое решение.** В нём сознательно нет метрик, полноценного логирования, повторов запросов и мер отказоустойчивости — я не стал усложнять решение этими вещами. Если интересно, обсудим отдельно.
 
-## Check a change
+### Ограничения
+
+- В этой версии нет интеграций с системами компании, пересчёта единиц измерения и валют, OCR сканов и платежей.
+- Замена счёта исправленным документом поставщика доступна только в [прототипе](submission/prototype/).
+
+### Затраченное время
+
+**7 часов моего личного времени**
+
+- 2 ч — разобраться в задании и предметной области.
+- 2 ч — подготовить требования, план, правила и архитектуру.
+- 1 ч — управлять поставкой.
+- 1 ч — проверить качество через код-ревью и ручные проверки.
+- 1 ч — подготовить README.
+
+Решение реализовали ИИ-агенты для разработки под моим руководством.
+
+## Отчёт
+
+### Проверка по открытым кейсам
+
+Официальный скрипт проверки прошёл все 12 шагов в обоих режимах. [Отчёт для Linux x64](submission/runner/public/native/eval-report.txt) · [Отчёт для Docker](submission/runner/public/docker/eval-report.txt) · [Все отчёты](submission/runner/public/)
+
+### Демонстрации агентом
+
+Claude Code читает счета, Playwright воспроизводит действия сотрудника. Для повтора нужен чистый том. [Настройки и запуск](submission/demos/)
+
+#### 004 · Расхождение в цене
+
+В счёте 12.52, в заказе 12.50. `UNIT_PRICE` даёт `needs_review`, несмотря на фразу об одобрении цены. В [карточке 004](http://127.0.0.1:8080/cases/case-004) **Accept discrepancy** с именем и причиной переводит кейс в **Ready for accounting**. Оценка сохраняется.
+
+[Материалы 004](submission/demos/004/) · [Транскрипт с вызовами инструментов](submission/demos/004/transcript.jsonl) · [Объяснение агента](submission/demos/004/explanation.md) · [Видео](submission/demos/004/demo.webm)
+
+#### 010 · Сопоставление и подтверждение
+
+Счёт без номера заказа получает `needs_information`. Агент предлагает заказ `ORD-010` и связь `L01 → OL-010-01`. L02 сопоставляется автоматически. Подтверждение в карточке меняет `needs_review` на `clear`.
+
+[Материалы 010](submission/demos/010/) · [Транскрипт до подтверждения](submission/demos/010/before-confirmation.jsonl) и [после него](submission/demos/010/after-confirmation.jsonl) · [Объяснение предложения](submission/demos/010/explanation-before.md) и [итога](submission/demos/010/explanation-after.md) · [Видео](submission/demos/010/demo.webm)
+
+### Другие сценарии в карточке
+
+- **101 · Запоздалая приёмка.** Нажмите **Re-check** в [кейсе 101](http://127.0.0.1:8080/cases/case-101). Приёмка 60 единиц даёт `clear`. Прежняя блокировка видна в **History**. [Видео 101](submission/scenarios/101-late-receipt.webm)
+- **102 · Исправление чтения.** В [кейсе 102](http://127.0.0.1:8080/cases/case-102) замените цену L02 с `64.00` на `6.40` через **Correct value**, указав имя и причину. Новая оценка даст `clear`. [Видео 102](submission/scenarios/102-correct-value.webm)
+- **009 · Конфликт.** Причины блокировки в [кейсе 009](http://127.0.0.1:8080/cases/case-009). [Видео 009](submission/scenarios/009-conflict.webm)
+- **008 · Дубликат.** В [кейсе 008](http://127.0.0.1:8080/cases/case-008) ссылка на исходный счёт в **Closed as duplicate**. [Видео 008](submission/scenarios/008-duplicate.webm)
+
+[Повторная проверка и обновление данных](docs/architecture.md#основные-потоки)
+
+### Сверка извлечения
+
+Все 76 значений и четыре оценки совпали с эталоном. [Сверка с PDF и эталоном](submission/extraction/)
+
+### Тесты и репетиции
+
+Прошли 260 тестов. [Карта тестовых сценариев](submission/tests/) · [Проверка на чистом клоне](submission/rehearsal.md) · [Репетиция изменения правил](submission/rule-change-rehearsal.md)
+
+## Ответы на вопросы
+
+### Какой участок ручной работы улучшает ваше решение и по каким показателям вы проверили бы пользу? Отделите ожидаемый эффект от измеренного.
+
+**Ожидаемый эффект.** Меньше ручного ввода и сверок, быстрее разбор исключений. Метрики пилота — доля счетов без вмешательства, время разбора и число ложных «всё в порядке» (цель — ноль).
+
+**Что измерено.** Пока только на тестовых данных задания: все 10 открытых кейсов дают правильное решение, а агент правильно прочитал оба тестовых счёта — все 69 цитат нашлись на своих страницах PDF. Сколько времени это экономит людям, можно измерить только на пилоте. [Отчёт](#отчёт) · [Сверка извлечения](#сверка-извлечения)
+
+### Какие зависимости от закупок, справочника поставщиков, приёмки и бухгалтерии потребуется уточнить перед внедрением? Какие риски или изменения процесса вы видите?
+
+Перед внедрением нужно договориться с каждой стороной, какие данные она даёт и как быстро: закупки — актуальные заказы и их изменения, справочник поставщиков — реквизиты и проверку их смены, приёмка — своевременное оприходование, бухгалтерия — приём проверенных счетов и обратную отметку об учёте. Главный риск — данные: они меняются, приходят не в том порядке и бывают недоступны, поэтому интеграции подключаются по одной. Меняется и процесс: сотрудник не перепечатывает счета, а разбирает исключения.
+
+### Какие три следующих улучшения вы предложили бы и в каком порядке? Для каждого укажите ожидаемую пользу, зависимость и способ проверить результат.
+
+1. **Пилот в работе со сбором обратной связи.** Решение пока проверено на синтетических счетах. Его нужно запустить на реальных счетах, посмотреть, что в нём лишнее и чего не хватает, и дорабатывать по фактам: разбирать каждый ручной случай по причине и править агента, правила и подсказки. Польза — меньше ручных вмешательств от итерации к итерации. Зависимость — согласие на итеративную работу. Проверка — доля счетов без ручного вмешательства растёт, а ложных «всё в порядке» нет ни одного.
+
+2. **Отправка проверенных счетов в учётную систему с обратной отметкой об учёте.** Сейчас проверенные данные всё равно приходится заносить в учётную систему вручную. Польза — одна точка вместо повторного ввода и актуальные остатки по заказам. Зависимость — доступ к учётной системе и согласованные с бухгалтерией правила передачи. Проверка — каждый переданный счёт появляется в учётной системе ровно один раз, а следующий счёт по тому же заказу видит правильный остаток.
+
+3. **Автоматическое разрешение исключений.** Больше всего времени уйдёт на разбор исключений между командами, а ручная переписка здесь не масштабируется. Цель — чтобы вопрос сам уходил в систему или команду, которая может его закрыть, ответ возвращался автоматически, а счёт сам перепроверялся. Польза — меньше переписки и ожидания. Зависимость — интеграции с системами закупок, приёмки и справочника поставщиков. Проверка — время от появления исключения до его закрытия и доля исключений, закрытых без участия человека.
+
+## Для разработчика
+
+Для локальной разработки нужны .NET SDK 10.0.100 и Node 24.
 
 ```sh
 dotnet tool restore
@@ -185,163 +248,3 @@ npm run lint
 npm run format:check
 npm run build
 ```
-
-Use Node 24 for the frontend. Rules are under `src/InvoiceDesk.Core/Rules`, grouped by rule family. See [quantities](src/InvoiceDesk.Core/Rules/Quantities), [pricing and rounding](src/InvoiceDesk.Core/Rules/Pricing) and [bank details](src/InvoiceDesk.Core/Rules/Bank). The [original business rules](docs/BUSINESS_RULES.md) and [runner contract](docs/EVALUATION.md) define evaluation behavior.
-
----
-
-
-# Invoice Exception Agent
-
-Тестовое задание на позицию **Senior Software Engineer**. На выполнение — **до 16 часов, два рабочих дня**. Язык, хранилище и внутренняя архитектура — на ваш выбор. Использование AI coding agents приветствуется.
-
-## Бизнес-задача
-
-Строительная компания получает счета от десятков поставщиков. Перед оплатой каждый счёт сверяется с заказом и приёмками: заказывали ли это, столько ли привезли, по той ли цене, верна ли арифметика, наш ли это поставщик и его ли банковский счёт, не учтён ли этот счёт раньше. Большинство счетов чистые, но проверка ручная, а ошибка стоит денег: двойная оплата, подменённый IBAN, оплата непоставленного.
-
-Нужна система, в которой **агент делает рутину** — читает PDF, сопоставляет строки счёта со строками заказа, объясняет расхождения, — а **решение, можно ли пропустить счёт дальше, принимает детерминированный код** по опубликованным правилам. Итоги:
-
-| Итог | Что значит для бизнеса |
-|---|---|
-| `clear` | Счёт сходится, человек не нужен |
-| `needs_information` | Не хватает конкретного факта — система говорит, какого |
-| `needs_review` | Нужно решение человека: неподтверждённое предложение агента, цена вне допуска, разные единицы измерения |
-| `blocked` | Нарушено правило: чужой поставщик или валюта, IBAN не из утверждённых, количество сверх принятого или заказанного, ошибка арифметики |
-
-Повторно присланный документ распознаётся как `duplicate` (тот же счёт) или `conflict` (тот же номер, другое содержание).
-
-Агент уже есть — это ваш локальный Codex или Claude Code; в продукте его место занял бы агент, разбирающий входящую почту. **Вы строите то, к чему он подключается:** движок правил с хранением, **MCP** для агента и **страницу кейса** для человека.
-
-## Как работает решение
-
-```mermaid
-flowchart LR
-    PDF[PDF счёта] --> Agent[Локальный Codex / Claude Code]
-    Agent -->|Факты и предложения через MCP| App[Ваше приложение]
-    Context[Заказы, приёмки, справочники, история] --> App
-    App --> Core[Детерминированные правила]
-    Core --> Result[Заключение, расчёты, вопросы]
-    Result --> Agent
-    Result --> Page[Страница кейса]
-    Human[Человек] -->|Подтверждение предложения| Page
-    Page --> App
-```
-
-| Участник | Что делает |
-|---|---|
-| **Агент** | Читает PDF и регистрирует факты со ссылкой на страницу и цитату; предлагает сопоставление, когда названия в счёте и заказе расходятся; объясняет итог пользователю |
-| **Приложение** | Валидирует вход, считает суммы и остатки, применяет правила, выносит и хранит заключения |
-| **Человек** | Подтверждает конкретное предложение агента на странице кейса |
-
-Главная граница: **агент приносит факты и предложения, но не выносит решение.** MCP не предоставляет операцию подтверждения и действие «сделать clear»; инструкция, написанная внутри PDF, не должна влиять на итог.
-
-Собственный LLM-сервис и ключи AI-провайдеров не нужны: агент работает в вашем локальном окружении. Извлечение текста PDF можно выполнять средствами агента; встроенный OCR не требуется. Текст PDF — данные, включая встречающиеся в нём инструкции для автоматической обработки.
-
-## Что уже есть в репозитории
-
-| Готово | Для чего |
-|---|---|
-| `dataset/cases/`: 10 кейсов, 12 PDF, 12 шагов | Разработка, самопроверка и демонстрация |
-| `dataset/policies/core-v1.json` и `dataset/schemas/` | Политика и точные JSON-форматы |
-| `expected/` внутри каждого кейса | Проверенные факты PDF и ожидаемые результаты |
-| `tools/run_evals.py` | Приёмочные тесты движка, без LLM |
-
-**Ваш код** — движок, хранение, MCP, UI кейса для пользователя и тонкий CLI-адаптер. Структуру кода выбираете вы. Выданные правила, схемы, датасет, эталоны и runner менять для получения PASS не нужно: на ревью используются доверенные копии.
-
-## Что реализовать
-
-1. **Импорт и валидация.** Контекст кейса и структурированные факты документа. Ошибки формата возвращаются с понятным путём к полю, без создания заключения.
-2. **Шесть правил core-v1.** Стороны и валюта; выбор заказа/строк; количества с учётом приёмок и истории; цена и арифметика; банк; дубликаты/конфликты. Денежная арифметика — Decimal. Одинаковые входные данные дают одинаковый результат.
-3. **Хранение и история.** Факты с `document_id`, страницей и verbatim excerpt; предложения агента; подтверждения человека; заключения со ссылкой на ревизию входа. Новое заключение сохраняется отдельно, прежнее не перезаписывается. Данные доступны после перезапуска процессов.
-4. **MCP.** Открыть кейс, получить контекст, внести факты и предложения, запустить проверку, прочитать результат/вопросы/историю и повторить проверку после изменения входа. Имена и гранулярность инструментов выбираете вы.
-5. **Страница кейса.** Строки, расчёты, checks, источники, история и форма подтверждения конкретного предложения человеком. Production-аутентификация не требуется.
-6. **CLI-адаптер и тесты.** Адаптер к контракту приёмочных тестов вызывает те же use cases, что и MCP. Добавьте тесты расчётов и доменных инвариантов.
-7. **Запуск и демонстрация.** Одна команда запуска приложения, рабочая конфигурация MCP для Codex либо Claude Code и транскрипт/запись демонстрации.
-
-MCP можно реализовать через stdio или Streamable HTTP. Для stdio протокольные сообщения идут в stdout, логи — в stderr. Укажите доступные агенту пути к PDF, особенно если приложение работает в контейнере.
-
-## Как выполнять задание и проверять себя
-
-```mermaid
-flowchart LR
-    Read[Прочитать правила и один кейс] --> Build[Реализовать ядро и CLI-адаптер]
-    Build --> Evals[Прогнать приёмочные тесты]
-    Evals --> Fix[Разобрать расхождения]
-    Fix --> Build
-    Evals --> Interfaces[Подключить MCP и страницу кейса]
-    Interfaces --> Demo[Показать кейсы 004 и 010]
-    Demo --> Submit[Сдать форк и инструкцию]
-```
-
-Проверка устроена в два слоя — чтобы при неверном итоге было видно, кто ошибся: агент, прочитавший документ, или движок, применивший правила.
-
-| Слой | Что проверяет | Как |
-|---|---|---|
-| **Приёмочные тесты движка** (`run_evals.py`) | Бизнес-логику: расчёты, правила, итог, вопросы, историю ревизий | Runner подаёт адаптеру **уже извлечённые факты**, контекст, предложения и подтверждения и сравнивает ответ с эталоном. LLM не участвует, результат детерминирован |
-| **Сквозной eval агента** | Извлечение фактов из PDF и границу ответственности агента | Агент проходит кейс через MCP; факты сравниваются с `expected/extraction.json`, итог — с эталоном.|
-
-Правил шесть, но крайних случаев в них много (округление, границы допуска, зависимые `unknown`, разные единицы измерения). Открытые кейсы — это исполняемая спецификация в примерах; на ревью тот же runner прогоняет новые кейсы по тем же правилам.
-
-Сначала прочитайте [правила](docs/BUSINESS_RULES.md) и откройте `dataset/cases/case-001/`: PDF, `steps/step-001.json` и `expected/step-001.json`. Точный протокол — в [контракте проверки](docs/EVALUATION.md).
-
-Установите зависимости проверяющих инструментов в отдельное окружение:
-
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install -r requirements.txt
-```
-
-После реализации адаптера запустите, подставив свою команду:
-
-```sh
-python3 tools/run_evals.py --adapter "<команда вашего адаптера>"
-```
-
-Runner добавляет `--state-dir <каталог>`, передаёт один JSON в stdin и ожидает один JSON в stdout. Он создаёт отдельное состояние на кейс и запускает новый процесс на каждый шаг. Отчёты: `results/local/eval-report.txt` и `.json`. **Exit code 0 — все кейсы пройдены, 1 — есть ошибки, 2 — ошибка запуска runner.** Для самопроверки стремитесь к 10/10; разберите каждое расхождение и объясните оставшиеся ограничения.
-
-Для быстрой итерации:
-
-```sh
-python3 tools/run_evals.py --adapter "<команда вашего адаптера>" --cases case-003,case-010 --keep-state
-```
-
-Проверка целостности самого датасета — отдельная команда; она не проверяет вашу реализацию. Для неё дополнительно нужен `pdftotext` из Poppler:
-
-```sh
-python3 tools/validate_dataset.py dataset
-```
-
-## Демонстрация локальным агентом
-
-Используйте PDF и контекст кейса, не подавайте агенту `expected/`, эталонные ответы или метки исходов из manifest. Открытые эталоны предназначены для разработки и runner.
-
-- **Кейс 004:** агент читает PDF, регистрирует факты и запускает проверку. Инструкция внутри PDF не меняет результат `needs_review` и не превращается в подтверждение человека.
-- **Кейс 010:** проверка даёт `needs_information`; агент регистрирует предложение → `needs_review`; человек подтверждает его на странице; агент повторяет проверку → `clear`. Предыдущие заключения остаются в истории.
-
-Пример запроса: «Проверь счёт из кейса 010. Если заказ определить нельзя, предложи соответствие и объясни, что мне нужно подтвердить». Зафиксируйте клиента, модель и tool calls.
-
-## Границы 16 часов
-
-Обычный invoice в EUR; один документ — один заказ; одна строка счёта — одна строка заказа. Несколько приёмок и ранее учтённых счетов допустимы. В core остаются ветки ошибок входных данных и нарушений (например, несовпадение валюты), описанные правилами.
-
-Не требуются: proforma, предоплата, доставка, скидки, кредит-ноты, конверсия валют/единиц, платежи, реальные ERP, OCR сканов, аутентификация, UI сравнения версий, восстановление после аварий и конкурентных сбоев. Повторы вызовов и аварийное восстановление обсуждаем на интервью. Обычное сохранение данных между запусками требуется.
-
-## Что сдать
-
-1. Сделайте **форк этого репозитория** и реализуйте решение в нём. Можно работать небольшими ветками/PR внутри своего форка.
-2. Дополните README своего форка: зависимости и одна команда запуска приложения, URL страницы кейса, конфигурация подключения MCP для Codex либо Claude Code и точная команда адаптера для runner. Инструкции должны работать на чистом клоне.
-3. В том же README кратко опишите архитектурные решения, упрощения, оставшиеся ограничения и фактически затраченное время (до 16 часов).
-4. Приложите отчёт runner по открытым кейсам и запись/транскрипт демонстрации 004 и 010 с логом tool calls и указанием клиента/модели. `results/local/` игнорируется Git; сдаваемые материалы можно положить в `submission/` и дать на них ссылки из README.
-5. В README своего решения кратко ответьте:
-    - Какой участок ручной работы улучшает ваше решение и по каким показателям вы проверили бы пользу? Отделите ожидаемый эффект от измеренного.
-    - Какие зависимости от закупок, справочника поставщиков, приёмки и бухгалтерии потребуется уточнить перед внедрением? Какие риски или изменения процесса вы видите?
-    - Какие три следующих улучшения вы предложили бы и в каком порядке? Для каждого укажите ожидаемую пользу, зависимость и способ проверить результат.
-6. Пришлите ссылку на форк и обеспечьте доступ.
-
-На ревью мы проверяем новое решение на свежем клоне, запускаем открытые и новые кейсы по тем же правилам, читаем код и повторяем демонстрацию через MCP. Новых скрытых бизнес-правил не будет. Интервью включает обсуждение архитектуры и небольшое изменение правила.
-
-## Где читать дальше
-
-- [BUSINESS_RULES.md](docs/BUSINESS_RULES.md) — нормативные правила и формулы.
-- [EVALUATION.md](docs/EVALUATION.md) — JSON-контракт и точный способ сравнения.

@@ -1,16 +1,19 @@
-# Case 010
+# Кейс 010
 
-Both print sessions used Claude Code 2.1.330 with resolved model `claude-sonnet-5-5`, company data `CTX-010-v1` and policy `core-v1`.
+Данные компании — `CTX-010-v1`, набор правил — `core-v1`. [Клиент и ограничения инструментов](../)
 
-1. The agent opened the case, read the isolated PDF and registered the facts. Revision 2 became `needs_information` with the order question.
-2. The order question named the invoice. The agent proposed ORD-010 without line links, and revision 3 stayed `needs_information` with a line-match question naming L01.
-3. The recorded second proposal links only L01 → OL-010-01. Revision 4 became `needs_review`, and the application matched L02 → OL-010-02 deterministically.
-4. A scripted Playwright browser acting as the AP clerk submitted the confirmation on the case 010 page 25.6 seconds after the L01 proposal. The script used `Demo AP Clerk` and only operated the form. Revision 5 became `clear`. The page confirmation applied to the order and L01. L02 stayed deterministic.
-5. In a separate print session, the agent called `assess_invoice`, `get_assessment` and `get_case_history`. Re-check returned saved assessment 5, the fourth assessment, with `inputs_unchanged: true`. It created no new revision. The [history hashes](restart-history.txt) match before and after a Compose restart.
+| Ревизия | Действие и результат |
+| --- | --- |
+| 2 | Агент прочитал копию PDF и зарегистрировал данные. Результат `needs_information`: нужен заказ. |
+| 3 | Агент предложил ORD-010 без привязки строк. Результат `needs_information`: нужна позиция для L01. |
+| 4 | Агент связал L01 → OL-010-01. Результат `needs_review`: надо подтвердить заказ и связь. L02 приложение сопоставило автоматически. |
+| 5 | Скрипт Playwright заполнил и отправил форму от имени `Demo AP Clerk`. Подтверждение заказа и L01 дало `clear`. Сопоставление L02 осталось автоматическим. |
 
-| Session | Prompt | Exposed tools | Stream JSON | Explanation |
+В отдельной сессии агент вызвал `assess_invoice`, `get_assessment` и `get_case_history`. Повторная проверка вернула оценку 5 с `inputs_unchanged: true`. Новая ревизия не появилась. [Сверка истории до и после перезапуска](restart-history.txt)
+
+[Видео карточки](demo.webm) · [Скрипт Playwright](confirm.mjs) · [Предложение и форма](01-review-before-confirming.png) · [История после подтверждения](02-confirmed-history.png)
+
+| Сессия | Запрос | Инструменты | Запись JSON | Объяснение |
 | --- | --- | --- | --- | --- |
-| Registration and proposal | [Prompt](prompt.txt) | [List](tools-before.json) | [Transcript](before-confirmation.jsonl) | [Claude's explanation](explanation-before.md) |
-| After confirmation | [Prompt](after-confirmation-prompt.txt) | [List](tools-after.json) | [Transcript](after-confirmation.jsonl) | [Claude's explanation](explanation-after.md) |
-
-[Playwright confirmation script](confirm.mjs) · [Proposal preview and form](01-review-before-confirming.png) · [Saved confirmation and decision history](02-confirmed-history.png)
+| Регистрация и предложения | [Запрос](prompt.txt) | [Список](tools-before.json) | [Запись](before-confirmation.jsonl) | [Ответ агента](explanation-before.md) |
+| После подтверждения | [Запрос](after-confirmation-prompt.txt) | [Список](tools-after.json) | [Запись](after-confirmation.jsonl) | [Ответ агента](explanation-after.md) |

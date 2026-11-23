@@ -84,12 +84,16 @@ public sealed class InvoiceFactValidationTests
         var history = Payload(await Call(mcp, "get_case_history"));
 
         var facts = RawFacts(scenario.Facts);
-        facts["lines"]![0]!["unit_net_price"] = "1000000000.01";
+        facts["lines"]![0]!["unit_net_price"] = "10000000000000.01";
         var error = await Register(mcp, facts, Source());
 
         Assert.True(error.IsError);
         var text = Assert.IsType<TextContentBlock>(Assert.Single(error.Content)).Text;
-        Assert.Contains("amount or quantity above 1,000,000,000", text, StringComparison.Ordinal);
+        Assert.Contains(
+            "amount or quantity above 10,000,000,000,000",
+            text,
+            StringComparison.Ordinal
+        );
         Assert.Contains("/facts/lines/0/unit_net_price", text, StringComparison.Ordinal);
         AssertSameJson(history, Payload(await Call(mcp, "get_case_history")));
     }

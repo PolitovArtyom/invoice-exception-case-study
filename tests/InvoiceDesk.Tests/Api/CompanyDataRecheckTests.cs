@@ -3,7 +3,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Storage;
 using InvoiceDesk.Tests.Support;
+using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
@@ -125,6 +127,96 @@ public sealed class CompanyDataRecheckTests
         response.EnsureSuccessStatusCode();
         AssertUnchanged(test.Initial, await Body(response));
         AssertSameJson(history, await test.History());
+    }
+
+    [Fact]
+    public async Task Should_block_against_counted_original_when_recheck_restores_the_supplier()
+    {
+        const string caseId = "case-008";
+        const string caseUrl = "/api/cases/" + caseId;
+        using var environment = new CaseTestEnvironment();
+        string folder = environment.CopyCase(caseId);
+        var step = PublicCases.ReadFirstStep(caseId);
+        var context = step["context"]!.DeepClone();
+        step["context"]!["suppliers"]!["suppliers"] = new JsonArray();
+        File.WriteAllText(Path.Combine(folder, "steps", "step-001.json"), step.ToJsonString());
+
+        await using var app = environment.Start();
+        using var page = app.CreateClient();
+        var before = (await Read(page, caseUrl))["revision"]!;
+        Assert.Equal("blocked", Text(before["result"]!, "decision"));
+        var initialConflictCheck = Assert.Single(before["result"]!["checks"]!.AsArray(), check =>
+            Text(check!, "code") == "DOCUMENT_CONFLICT"
+        )!;
+        Assert.Equal("unknown", Text(initialConflictCheck, "status"));
+        Assert.Equal("SUPPLIER_IDENTITY", Text(initialConflictCheck, "depends_on"));
+
+        context["context_version"] = "CTX-008-SUPPLIER-RESTORED";
+        environment.WriteCompanyDataUpdate(caseId, context.ToJsonString());
+        using var response = await Recheck(page, caseId);
+        response.EnsureSuccessStatusCode();
+        var rechecked = await Body(response);
+        Assert.Equal("2", Text(rechecked, "assessment_id"));
+        var result = rechecked["result"]!;
+        AssertOutcome(
+            result,
+            "blocked",
+            "DOC-008",
+            ["L01", "L02", "L03"],
+            [new("DOCUMENT_CONFLICT", "DOC-008", "fail", "blocked")],
+            matchedOrderId: "ORD-008",
+            disposition: "conflict",
+            originalDocumentId: "ORIGINAL-008"
+        );
+        var latest = await Read(page, caseUrl);
+        Assert.Equal("needs_attention", Text(latest, "stage"));
+        AssertSameJson(before["document"], latest["revision"]!["document"]);
+        Assert.Equal("ORIGINAL-008", Text(latest["revision"]!["original_invoice"]!, "document_id"));
+        var row = Assert.Single((await Read(page, "/api/cases"))["cases"]!.AsArray())!;
+        Assert.Equal("needs_attention", Text(row, "tab"));
+    }
+
+    [Fact]
+    public async Task Should_keep_older_assessment_when_rechecking_after_a_policy_version_change()
+    {
+        const string caseId = "case-001";
+        using var environment = new CaseTestEnvironment();
+        environment.CopyCase(caseId);
+        await using var app = environment.Start();
+        using var page = app.CreateClient();
+        using (var scope = app.Services.CreateScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<InvoiceDatabase>();
+            var revision = database.Revisions.Single(row => row.CaseId == caseId);
+            database.Entry(revision).Property(row => row.Result).CurrentValue =
+                revision.Result! with
+                {
+                    PolicyVersion = "previous-policy",
+                };
+            database.SaveChanges();
+        }
+        string caseUrl = $"/api/cases/{caseId}";
+        var original = (await Read(page, caseUrl + "/revisions/1"))["revision"]!["result"]!;
+        Assert.Equal("previous-policy", Text(original, "policy_version"));
+
+        using var response = await Recheck(page, caseId);
+        response.EnsureSuccessStatusCode();
+        var reassessed = await Body(response);
+
+        Assert.False(reassessed["inputs_unchanged"]!.GetValue<bool>());
+        var history = (await Read(page, caseUrl + "/history")).AsArray();
+        Assert.Collection(
+            history,
+            latest =>
+            {
+                var result = latest!["result"]!;
+                Assert.Equal(2, result["input_revision"]!.GetValue<int>());
+                Assert.Equal(CaseMetadata.PolicyVersion, Text(result, "policy_version"));
+                Assert.Equal("clear", Text(result, "decision"));
+                AssertSameJson(reassessed["result"], result);
+            },
+            prior => AssertSameJson(original, prior!["result"])
+        );
     }
 
     [Fact]

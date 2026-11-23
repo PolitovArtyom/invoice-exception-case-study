@@ -1,34 +1,18 @@
-# Public evaluator runs
+# Результаты официальной проверки
 
-Both reports come from the unchanged runner with a fresh state directory per case. Both runs passed **10/10 cases and 12/12 steps** with no differences, critical false clears, escalation errors or adapter failures.
+Обе версии адаптера прошли **10 из 10 кейсов и 12 из 12 шагов**. Расхождений с эталоном, ошибочных пропусков и эскалаций, сбоев адаптера нет. Неизменённый скрипт создавал отдельный чистый каталог состояния для каждого кейса. [Коммит замеров](https://github.com/PolitovArtyom/invoice-exception-case-study/commit/a6afb58445653180de04d8293fb15e41006152f6)
 
-| Run | Reports | Wall time | Slowest step |
-| --- | --- | --- | --- |
-| Self-contained Linux x64 | [JSON](native/eval-report.json) · [text](native/eval-report.txt) | 43.44 s | 5.036 s |
-| Docker fallback | [JSON](docker/eval-report.json) · [text](docker/eval-report.txt) | 38.39 s | 4.974 s |
+| Адаптер | Отчёты | Самый долгий шаг |
+| --- | --- | --- |
+| `dist/linux-x64/InvoiceDesk.Adapter` | [JSON](native/eval-report.json) · [текст](native/eval-report.txt) | 2,918 с |
+| `./scripts/adapter-docker` | [JSON](docker/eval-report.json) · [текст](docker/eval-report.txt) | 3,158 с |
 
-Recorded on Linux x86_64 with Docker Engine 29.1.2 and Python 3.12.3. Wall times include Python startup. Per-step times come from the evaluator. The runner's timeout was 30 seconds per step.
+Проверка прошла на Linux x86-64 с Docker Engine 29.1.2. Экспорт Linux запущен в контейнере с Python. Скрипт с Docker-адаптером работал с Python на хосте и запускал контейнер без сети для каждого шага. Тайм-аут шага — 30 секунд. Отчёты скопированы из `results/local/exported/` и `results/local/docker fallback/`. При входе `{}` оба адаптера вернули один JSON с `VALIDATION_ERROR` и код выхода 2. [Команды и проверка](../../rehearsal.md#запуск-официальной-проверки)
 
-```sh
-docker build -f Dockerfile.adapter --target export --build-arg RID=linux-x64 \
-  --output type=local,dest=dist/linux-x64 .
-docker build -f Dockerfile.adapter --target runtime -t invoice-adapter:local .
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python tools/run_evals.py --adapter 'dist/linux-x64/InvoiceDesk.Adapter' \
-  --report-dir submission/runner/public/native
-.venv/bin/python tools/run_evals.py --adapter './scripts/adapter-docker' \
-  --report-dir 'results/local/public docker fallback'
-```
-
-The Docker report files were copied from the path shown above. That relative path includes spaces. A separate two-step run reopened the SQLite state through the same launcher, and the host UID/GID owned the writable database. Both adapters returned exit code 2 with a single `VALIDATION_ERROR` JSON response for `{}` on stdin.
-
-| Export | Inspection and execution |
+| Экспорт | Файлы, проверенные на Linux x86-64 |
 | --- | --- |
-| `linux-x64` | x86-64 ELF apphost and `libe_sqlite3.so`. Native and Docker fallback passed the runner. |
-| `linux-arm64` | AArch64 ELF apphost and `libe_sqlite3.so`. Export inspected on Linux x64. |
-| `osx-arm64` | arm64 Mach-O apphost and `libe_sqlite3.dylib`. Apphost and SQLite CodeDirectory flags include ad-hoc signing. |
-| `osx-x64` | x86_64 Mach-O apphost and `libe_sqlite3.dylib`. Apphost CodeDirectory flags include ad-hoc signing. Intel SQLite dylib has no CodeDirectory. |
-| `win-x64` | x86-64 PE apphost and `e_sqlite3.dll`. Export inspected on Linux x64. Native Windows is unsupported. |
-
-The Mach-O inspection read the embedded signature metadata on Linux. Native macOS and Linux arm64 execution remain unverified.
+| `linux-x64` | x86-64 ELF и `libe_sqlite3.so`. Адаптер также запускался на этой платформе. |
+| `linux-arm64` | AArch64 ELF и `libe_sqlite3.so`. |
+| `osx-arm64` | arm64 Mach-O и `libe_sqlite3.dylib`. |
+| `osx-x64` | x86-64 Mach-O и `libe_sqlite3.dylib`. |
+| `win-x64` | x86-64 PE и `e_sqlite3.dll`. |
