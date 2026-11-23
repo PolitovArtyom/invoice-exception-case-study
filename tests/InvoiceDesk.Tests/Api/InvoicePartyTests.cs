@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Tests.Support;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
@@ -190,7 +191,7 @@ public sealed class InvoicePartyTests
                 Facts = scenario.Facts with
                 {
                     Currency = null,
-                    MissingFields = [new("/currency", "illegible")],
+                    MissingFields = [new("/currency", MissingReason.Illegible)],
                 },
             }
         ).RegisterAndRead();
@@ -410,7 +411,7 @@ public sealed class InvoicePartyTests
             Facts = scenario.Facts with
             {
                 Buyer = scenario.Facts.Buyer with { RegistrationId = null, LegalName = name },
-                MissingFields = [new("/buyer/registration_id", "not_present_in_document")],
+                MissingFields = [new("/buyer/registration_id", MissingReason.NotPresentInDocument)],
             },
             CompanyData = scenario.CompanyData with
             {
@@ -435,7 +436,7 @@ public sealed class InvoicePartyTests
                     ?
                     [
                         .. scenario.Facts.MissingFields,
-                        new("/supplier/registration_id", "not_present_in_document"),
+                        new("/supplier/registration_id", MissingReason.NotPresentInDocument),
                     ]
                     : scenario.Facts.MissingFields,
             },

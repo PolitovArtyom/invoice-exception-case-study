@@ -32,8 +32,9 @@ public static class InvoiceJson
         new InputDecimalStringConverter()
     );
 
-    private static readonly JsonSerializerOptions CompanyDataComparisonOptions =
-        WithDecimalConverter(new ComparableDecimalStringConverter());
+    private static readonly JsonSerializerOptions ComparisonOptions = WithDecimalConverter(
+        new ComparableDecimalStringConverter()
+    );
 
     internal static T ReadInput<T>(JsonNode json) =>
         json.Deserialize<T>(InputOptions) ?? throw new JsonException("A JSON value is required.");
@@ -44,12 +45,9 @@ public static class InvoiceJson
 
     public static string Write<T>(T value) => JsonSerializer.Serialize(value, Options);
 
-    internal static bool SameCompanyData(
-        CompanyData.CompanyData left,
-        CompanyData.CompanyData right
-    ) =>
-        JsonSerializer.Serialize(left, CompanyDataComparisonOptions)
-        == JsonSerializer.Serialize(right, CompanyDataComparisonOptions);
+    internal static bool SameValues<T>(T left, T right) =>
+        JsonSerializer.Serialize(left, ComparisonOptions)
+        == JsonSerializer.Serialize(right, ComparisonOptions);
 
     private static JsonSerializerOptions WithDecimalConverter(DecimalStringConverter converter)
     {

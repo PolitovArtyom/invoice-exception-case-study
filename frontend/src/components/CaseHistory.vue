@@ -12,6 +12,7 @@ const actions: Record<RevisionView['action']['kind'], string> = {
   confirm_proposal: 'Confirmed a proposal',
   replace_company_data: 'Loaded company data',
   recheck_invoice: 'Re-checked invoice',
+  correct_fact: 'Corrected a parsed value',
 }
 const actors: Record<RevisionView['action']['actor'], string> = {
   trusted_loader: 'Trusted loader',
@@ -61,6 +62,24 @@ function actionLabel(action: RevisionView['action']) {
           >
             {{ confirmation.confirmed_by }} confirmed
             {{ confirmation.proposal_id }}
+          </p>
+          <p v-if="revision.correction">
+            {{ revision.correction.person }} corrected
+            <code>{{ revision.correction.field_path }}</code>
+            from {{ revision.correction.previous_value ?? 'missing' }} to
+            {{ revision.correction.value ?? 'missing' }}.
+            <q>{{ revision.correction.reason }}</q>
+            <time :datetime="revision.action.recorded_at">
+              {{ new Date(revision.action.recorded_at).toLocaleString() }}
+            </time>
+          </p>
+          <p v-if="revision.acceptance">
+            {{ revision.acceptance.person }} accepted the discrepancy in
+            assessment {{ revision.acceptance.assessment_id }}.
+            <q>{{ revision.acceptance.reason }}</q>
+            <time :datetime="revision.acceptance.recorded_at">
+              {{ new Date(revision.acceptance.recorded_at).toLocaleString() }}
+            </time>
           </p>
           <p class="muted">
             Policy {{ revision.policy_version }} · Company data

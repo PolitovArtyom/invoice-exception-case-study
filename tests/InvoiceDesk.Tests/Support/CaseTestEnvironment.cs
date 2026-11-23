@@ -32,17 +32,22 @@ internal sealed class CaseTestEnvironment : IDisposable
         return fixture;
     }
 
+    public void CopyScenarioCase(string caseId) =>
+        CopyCaseFolder(
+            Path.Combine(RepositoryScenarios, "cases", caseId),
+            Path.Combine(ScenarioPath, "cases", caseId)
+        );
+
+    private static string RepositoryScenarios =>
+        Path.Combine(Path.GetDirectoryName(PublicCases.Root)!, "scenarios");
+
     public void CopyLateReceiptCase()
     {
         const string caseId = "case-101";
-        string scenarios = Path.Combine(Path.GetDirectoryName(PublicCases.Root)!, "scenarios");
-        CopyCaseFolder(
-            Path.Combine(scenarios, "cases", caseId),
-            Path.Combine(ScenarioPath, "cases", caseId)
-        );
+        CopyScenarioCase(caseId);
         WriteCompanyDataUpdate(
             caseId,
-            File.ReadAllText(Path.Combine(scenarios, "updates", caseId, "context.json"))
+            File.ReadAllText(Path.Combine(RepositoryScenarios, "updates", caseId, "context.json"))
         );
     }
 

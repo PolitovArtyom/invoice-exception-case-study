@@ -1,5 +1,6 @@
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules.Duplicates;
 using InvoiceDesk.Core.Storage;
@@ -24,7 +25,12 @@ public sealed class CaseRepository(InvoiceDatabase database)
                 row.CaseId == invoiceCase.Id && row.Number == invoiceCase.CurrentRevision
             );
 
-    internal (InvoiceCase Case, CaseRevision Revision, bool InputsChanged)[] List() =>
+    internal (
+        InvoiceCase Case,
+        CaseRevision Revision,
+        DiscrepancyAcceptance? Acceptance,
+        bool InputsChanged
+    )[] List() =>
         database
             .Cases.AsNoTracking()
             .OrderBy(invoiceCase => invoiceCase.Id)
@@ -32,7 +38,12 @@ public sealed class CaseRepository(InvoiceDatabase database)
             .Select(invoiceCase =>
             {
                 var revision = ReadAssessmentOrLatestRevision(invoiceCase);
-                return (invoiceCase, revision, InputsChanged(invoiceCase, revision));
+                return (
+                    invoiceCase,
+                    revision,
+                    ReadCurrentAcceptance(invoiceCase, revision),
+                    InputsChanged(invoiceCase, revision)
+                );
             })
             .ToArray();
 
@@ -50,8 +61,29 @@ public sealed class CaseRepository(InvoiceDatabase database)
                 row.SnapshotId != assessed.SnapshotId
                 || row.DocumentId != assessed.DocumentId
                 || row.Proposals != assessed.Proposals
+                || row.CorrectedFacts != assessed.CorrectedFacts
             )
         );
+
+    internal DiscrepancyAcceptance? ReadCurrentAcceptance(
+        InvoiceCase invoiceCase,
+        CaseRevision assessed
+    ) =>
+        assessed.Number == invoiceCase.CurrentRevision
+            ? assessed.Acceptance
+            : database
+                .Revisions.AsNoTracking()
+                .Where(row =>
+                    row.CaseId == invoiceCase.Id && row.Number == invoiceCase.CurrentRevision
+                )
+                .Select(row => row.Acceptance)
+                .Single();
+
+    internal void AcceptDiscrepancy(CaseRevision revision, DiscrepancyAcceptance acceptance)
+    {
+        revision.Acceptance = acceptance;
+        database.SaveChanges();
+    }
 
     internal CaseRevision ReadAssessmentOrLatestRevision(InvoiceCase invoiceCase) =>
         RevisionQuery
@@ -111,13 +143,15 @@ public sealed class CaseRepository(InvoiceDatabase database)
                 .Revisions.Where(revision =>
                     revision.DocumentId == document.Id && revision.Result != null
                 )
-                .Max(revision => (int?)revision.Number)
+                .OrderByDescending(revision => revision.Number)
+                .FirstOrDefault()
             select new
             {
                 document.Id,
                 document.Facts,
                 document.ContentSha256,
-                LatestAssessment = latestAssessment,
+                LatestAssessment = (int?)latestAssessment!.Number,
+                latestAssessment.CorrectedFacts,
             }
         )
             .AsEnumerable()
@@ -130,7 +164,7 @@ public sealed class CaseRepository(InvoiceDatabase database)
                         System.Globalization.CultureInfo.InvariantCulture
                     )
                 ),
-                document.Facts
+                document.CorrectedFacts ?? document.Facts
             ))
             .ToArray();
 
@@ -140,7 +174,8 @@ public sealed class CaseRepository(InvoiceDatabase database)
         InvoiceResult? result,
         RevisionAction action,
         OriginalInvoice? original,
-        DuplicateAttempt? duplicate
+        DuplicateAttempt? duplicate,
+        FactCorrection? correction
     )
     {
         if (database.Entry(invoiceCase).State == EntityState.Detached)
@@ -157,6 +192,9 @@ public sealed class CaseRepository(InvoiceDatabase database)
             Proposals = inputs.Proposals.Length == 0 ? null : new(inputs.Proposals),
             OriginalInvoice = original,
             DuplicateAttempt = duplicate,
+            CorrectedFacts = inputs.CorrectedFacts,
+            Correction = correction,
+            HasCorrectionConflict = inputs.HasCorrectionConflict,
         };
         database.Revisions.Add(revision);
         invoiceCase.CurrentRevision = inputs.Number;

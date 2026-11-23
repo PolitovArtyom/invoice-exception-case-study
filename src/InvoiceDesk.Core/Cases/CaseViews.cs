@@ -1,5 +1,6 @@
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Core.Model.Results;
 
 namespace InvoiceDesk.Core.Cases;
@@ -16,7 +17,11 @@ public sealed record CaseView(
     ProposalView[] Proposals,
     string? EffectiveProposalId,
     PurchaseOrder[] OpenSupplierOrders,
-    CaseIssue[] Issues
+    CaseIssue[] Issues,
+    DiscrepancyAcceptance? Acceptance,
+    bool CanAccept,
+    bool CanCorrect,
+    CorrectableFact[] CorrectableFacts
 );
 
 public sealed record RevisionView(
@@ -28,7 +33,9 @@ public sealed record RevisionView(
     string? AssessmentId,
     InvoiceResult? Result,
     OriginalInvoice? OriginalInvoice,
-    DuplicateAttempt? DuplicateAttempt
+    DuplicateAttempt? DuplicateAttempt,
+    DiscrepancyAcceptance? Acceptance,
+    FactCorrection? Correction
 )
 {
     public bool IsDuplicateAttempt =>
@@ -62,7 +69,8 @@ public sealed record CaseSummary(
     CheckCode? MainIssue,
     IssueOwner? MainIssueOwner,
     int? AssessedRevision,
-    string? ContextVersion
+    string? ContextVersion,
+    string? AcceptedBy
 );
 
 public sealed record CaseList(CaseStageCounts Counts, CaseSummary[] Cases);
@@ -80,6 +88,7 @@ public enum CaseStage
     NotRead,
     NeedsAttention,
     ReadyForAccounting,
+    AcceptedWithDiscrepancy,
     Closed,
 }
 
@@ -89,3 +98,5 @@ public enum CaseTab
     ReadyForAccounting,
     Closed,
 }
+
+public sealed record CorrectableFact(string Path, bool CanBeMissing);

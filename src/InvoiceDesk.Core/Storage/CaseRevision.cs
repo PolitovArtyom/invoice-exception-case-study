@@ -1,4 +1,5 @@
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Core.Model.Proposals;
 using InvoiceDesk.Core.Model.Results;
 
@@ -27,6 +28,16 @@ internal sealed class CaseRevision
     public StoredProposals? Proposals { get; init; }
 
     public InvoiceResult? Result { get; init; }
+
+    public DiscrepancyAcceptance? Acceptance { get; set; }
+
+    public InvoiceFacts? CorrectedFacts { get; init; }
+
+    public FactCorrection? Correction { get; init; }
+
+    public bool HasCorrectionConflict { get; init; }
+
+    public InvoiceFacts? ReadFacts() => CorrectedFacts ?? Document?.Facts;
 }
 
 internal sealed record StoredProposals(RegisteredProposal[] Items);

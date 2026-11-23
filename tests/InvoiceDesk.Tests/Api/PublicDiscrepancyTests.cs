@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using InvoiceDesk.Tests.Support;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
@@ -99,6 +100,22 @@ public sealed class PublicDiscrepancyTests
         var assessed = Payload(await Call(mcp, "assess_invoice", caseId));
         AssertSameJson(result, assessed["result"]);
 
+        AssertBlockedTotals(result);
+        Assert.Equal("needs_attention", Text(view, "stage"));
+        var facts = revision["document"]!["facts"]!;
+        var issue = Assert.Single(view["issues"]!.AsArray())!;
+        var source = Assert.Single(issue["facts"]!.AsArray())!;
+        Assert.Equal("/declared_total", Text(source, "path"));
+        Assert.Equal("1673.20", Text(source, "value"));
+        Assert.Equal("1663.20", Text(source, "calculated_value"));
+        Assert.Equal("1,673.20", Text(Assert.Single(source["quotes"]!.AsArray())!, "excerpt"));
+        Assert.Equal("1673.20", Text(facts, "declared_total"));
+        Assert.Equal("1386.00", Text(facts, "declared_subtotal"));
+        Assert.Equal("277.20", Text(facts, "declared_tax_total"));
+    }
+
+    internal static void AssertBlockedTotals(JsonNode result)
+    {
         AssertOutcome(
             result,
             "blocked",
@@ -107,11 +124,6 @@ public sealed class PublicDiscrepancyTests
             [new("TOTALS_ARITHMETIC", "DOC-005", "fail", "blocked")],
             matchedOrderId: "ORD-005"
         );
-        Assert.Equal("needs_attention", Text(view, "stage"));
-        var facts = revision["document"]!["facts"]!;
-        Assert.Equal("1673.20", Text(facts, "declared_total"));
-        Assert.Equal("1386.00", Text(facts, "declared_subtotal"));
-        Assert.Equal("277.20", Text(facts, "declared_tax_total"));
         AssertTotals(result, "1386.00", "277.20", "1663.20");
         AssertLine(
             result,

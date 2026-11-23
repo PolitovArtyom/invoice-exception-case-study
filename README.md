@@ -4,8 +4,8 @@ Invoice Desk checks an invoice against a saved company-data snapshot and shows t
 
 | Scope | Delivery |
 | --- | --- |
-| Built | An MCP server receives invoice facts with PDF citations. Claude Code is the demo client. The app applies R1–R6, stores assessments in SQLite and shows their calculations and sources. The workspace records human match confirmation and can re-check with a new company-data snapshot. It groups cases into Needs attention, Ready for accounting and Closed. The Linux x64 export and the Docker fallback each pass ten public cases and twelve steps. |
-| Described only | Accounting handover and counted feedback, receipt-triggered re-check, and the production controls below. Human discrepancy acceptance and correction of extracted values are not built. |
+| Built | An MCP server receives invoice facts with PDF citations. Claude Code is the demo client. The app applies R1–R6, stores assessments in SQLite and shows their calculations and sources. The workspace records human match confirmation and discrepancy acceptance, corrects misread PDF values, and can re-check with a new company-data snapshot. It groups cases into Needs attention, Ready for accounting and Closed. The Linux x64 export and the Docker fallback each pass ten public cases and twelve steps. |
+| Described only | Accounting handover and counted feedback, receipt-triggered re-check, and the production controls below. |
 | Prototype only | The [simulated workspace](submission/prototype/) shows supplier-corrected invoices and case 103. When a re-import changes the facts used to compare invoices, the app reports a conflict. |
 
 ## Architecture
@@ -23,7 +23,7 @@ docker compose exec -T app curl -fsS http://127.0.0.1:8080/health
 
 The health response is `{"status":"ok"}` after migrations and case loading. Open [the workspace](http://127.0.0.1:8080/) or [case 001](http://127.0.0.1:8080/cases/case-001). The app binds to loopback. Set `INVOICE_PORT` to change the host port and update any client URL to match. The container port stays 8080.
 
-Cases 001–003, 005–009 and 101 start with fixture facts and are labelled as test data. Cases 004 and 010 start with company data and a PDF source for the agent. The read-only mounts under `dataset` and `scenarios` hold those inputs. For a new scenario, use the same case ID in the folder name, the case manifest and the first step. The loader ignores runner expectations and imports first-step facts only for the explicit fixture allow-list.
+Cases 001–003, 005–009, 101 and 102 start with fixture facts and are labelled as test data. Cases 004 and 010 start with company data and a PDF source for the agent. The read-only mounts under `dataset` and `scenarios` hold those inputs. For a new scenario, use the same case ID in the folder name, the case manifest and the first step. The loader ignores runner expectations and imports first-step facts only for the explicit fixture allow-list.
 
 Restart and wait for readiness without clearing the SQLite volume:
 
@@ -32,7 +32,7 @@ docker compose restart app
 docker compose up --wait
 ```
 
-`docker compose down` stops the app and keeps the volume. `docker compose down --volumes` deletes this project's saved cases, assessments and confirmations. Run the startup command again to reload the initial cases.
+`docker compose down` stops the app and keeps the volume. `docker compose down --volumes` deletes this project's saved cases, assessments and human actions. Run the startup command again to reload the initial cases.
 
 ### Connect an agent
 
@@ -60,7 +60,14 @@ Open [case 101](http://127.0.0.1:8080/cases/case-101) on a fresh volume. The inv
 
 For any case with saved invoice facts, place a complete replacement snapshot at `scenarios/updates/<case_id>/context.json` on the host. The page action and MCP `assess_invoice` pick it up while the app is running. Re-check compares typed snapshot values. Whitespace, property order and equivalent decimal spellings are treated alike. Array order and the version label are significant. A missing or equal file returns the saved assessment with `inputs_unchanged: true` when it still covers the current inputs. If a combined duplicate submission retained changed inputs, re-check assesses them using the existing snapshot. An invalid file identifies the failing field and leaves history intact.
 
-A clear result enters Ready for accounting and shows the assessed revision and snapshot version. Handover is simulated. Counted invoice quantities come from the supplied company data.
+A clear result or an active discrepancy acceptance enters Ready for accounting. The page shows the assessed revision and snapshot version. Handover is simulated. Counted invoice quantities come from the supplied company data.
+
+### Resolve an invoice on the case page
+
+- Register the reading for [case 004](submission/demos/004/) over MCP and open the case page. If the buyer and supplier agreed to the unit price difference, choose **Accept discrepancy** and enter your name and reason. The invoice appears in Ready for accounting with your acceptance, while its saved rules decision stays `needs_review`. Any later revision ends the acceptance. History keeps the person, reason, time and accepted assessment.
+- Open [case 102](http://127.0.0.1:8080/cases/case-102) on a fresh volume. Under **Needs attention**, find line L02's unit net price, read as `64.00` beside the quote “6.40”. Choose **Correct value**, enter `6.40`, your name and your reason. A new assessment is clear. The same invoice PDF and the earlier blocked assessment remain available. For a nullable value, choose a separate missing reason when marking it missing.
+
+Correction changes the reading of the same PDF. Core excludes the active document from its own conflict comparison. If a correction makes the reading match a different recorded invoice, the new assessment blocks and references that invoice. Re-importing follows the usual duplicate or conflict rules. Company data is updated through its source files and a re-check.
 
 ## Export and evaluate the portable adapter
 
@@ -145,8 +152,7 @@ Owner's active time **[owner to fill in]**
 ## Limitations
 
 - Native macOS and Linux arm64 execution remain unverified. Windows is unsupported.
-- The app has no authentication or production controls for concurrent updates, retries or recovery. A production agent needs credentials separate from those used by the person confirming proposals.
-- Discrepancy acceptance and correction of extracted values are not built.
+- The app has no authentication or production controls for concurrent updates, retries or recovery. Production agent credentials need to be separate from credentials for human page actions.
 
 ### Simplifications
 
@@ -154,7 +160,7 @@ Each input quantity, price and amount is limited to 1,000,000,000 in invoice fac
 
 Identifiers are trimmed and uppercased while retaining separators and leading zeros. Names and descriptions are trimmed, internal whitespace collapses to one space, and casing uses `ToLowerInvariant()`. IBAN comparison removes whitespace and uppercases. Supplier lookup uses registration only. Buyer lookup uses a unique legal name or alias when registration is absent. Order-relative identity and the document supplier’s bank check are independent.
 
-A business key is the resolved document supplier and buyer plus the normalized invoice number. The app checks every same-key record in supplied invoice history first, then earlier case imports. It resolves earlier imports against the current company data. It picks the first equal record as the original of a duplicate, or the first record for a conflict if all differ. Equality compares dates, currency, PO reference, IBAN, declared totals, and normalized line tuples as a multiset with exact decimal comparison. It ignores file/hash, descriptions, payment terms and line IDs/order. The supplied history format carries no payment terms. A changed re-import is assessed as a conflict and both versions remain available. Reassessing the active invoice saves a fresh assessment and excludes that version from its own conflict comparison. An equal history record arriving through a context update does not turn the active invoice into a duplicate. A duplicate advances history with its PDF reference and keeps the previous assessment current. A case with only a duplicate is Closed. When a runner step supplies company data with a duplicate, the new snapshot is retained for a later assessment. If those inputs changed, the previous result remains visible and the case requires attention before accounting.
+A business key is the resolved document supplier and buyer plus the normalized invoice number. The app checks every same-key record in supplied invoice history first, then earlier case imports. It resolves earlier imports with their latest saved reading against the current company data. It picks the first equal record as the original of a duplicate, or the first record for a conflict if all differ. Equality compares dates, currency, PO reference, IBAN, declared totals, and normalized line tuples as a multiset with exact decimal comparison. It ignores file/hash, descriptions, payment terms and line IDs/order. The supplied history format carries no payment terms. A changed re-import is assessed as a conflict and both versions remain available. Reassessing the active invoice saves a fresh assessment and excludes that version from its own conflict comparison. An equal history record arriving through a context update does not turn the active invoice into a duplicate. A duplicate advances history with its PDF reference, keeps the previous assessment current and ends any prior human acceptance. A case with only a duplicate is Closed. When a runner step supplies company data with a duplicate, the new snapshot is retained for a later assessment. If those inputs changed, the previous result remains visible and the case requires attention before accounting.
 
 An explicit PO reference can select a closed order. With an absent reference, automatic selection requires one open order for the resolved supplier and buyer (if resolved) with a distinct exact match for every line. An unknown printed reference needs a proposal. Exact line matches use SKU, description or an explicit alias; all lines in a contested match stay unresolved automatically.
 

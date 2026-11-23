@@ -1,4 +1,5 @@
 using System.Globalization;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Tests.Support;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
 
@@ -188,7 +189,7 @@ public sealed class InvoiceCalculationTests
                     Lines = [scenario.Facts.Lines[0] with { DeclaredTaxAmount = null }],
                     MissingFields =
                     [
-                        new("/lines/0/declared_tax_amount", "not_present_in_document"),
+                        new("/lines/0/declared_tax_amount", MissingReason.NotPresentInDocument),
                     ],
                 },
             }

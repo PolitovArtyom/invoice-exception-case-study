@@ -9,10 +9,12 @@ internal sealed record RevisionInputs(
     int Number,
     CompanyDataSnapshot Snapshot,
     InvoiceDocument? Document,
-    RegisteredProposal[] Proposals
+    RegisteredProposal[] Proposals,
+    InvoiceFacts? CorrectedFacts,
+    bool HasCorrectionConflict
 )
 {
     public CompanyData CompanyData => Snapshot.Data;
 
-    public InvoiceFacts? Facts => Document?.Facts;
+    public InvoiceFacts? Facts => CorrectedFacts ?? Document?.Facts;
 }

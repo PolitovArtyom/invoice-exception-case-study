@@ -14,16 +14,15 @@ internal static class ProposalInputs
         string path
     )
     {
-        if (inputs.Document is not { } document || proposal.DocumentId != document.Facts.DocumentId)
+        if (inputs.Facts is not { } facts || proposal.DocumentId != facts.DocumentId)
             throw new InvoiceValidationException(
                 path + "/document_id",
                 "Expected the active invoice document."
             );
 
-        var facts = document.Facts;
         var order = matching!.FindOrder(proposal.OrderId)
             ?? throw new InvoiceValidationException(path + "/order_id", "Order does not exist.");
-        var registration = new RegisteredProposal(proposal, document.ImportRevision, null);
+        var registration = new RegisteredProposal(proposal, inputs.Document!.ImportRevision, null);
         var existing = inputs.Proposals.FirstOrDefault(item =>
             item.Proposal.ProposalId == proposal.ProposalId
         );
@@ -85,7 +84,7 @@ internal static class ProposalInputs
 
         if (existing is null)
             return [.. inputs.Proposals, registration];
-        return existing.ImportRevision == document.ImportRevision
+        return existing.ImportRevision == registration.ImportRevision
             ? inputs.Proposals
             : inputs.Proposals.Select(item => item == existing ? registration : item).ToArray();
     }

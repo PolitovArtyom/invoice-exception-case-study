@@ -1,5 +1,6 @@
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Rules.Duplicates;
@@ -31,12 +32,20 @@ internal sealed class CaseAssessmentCalculator(
             current?.Document,
             submission.Reading
         );
-        var parties = document is null
-            ? null
-            : InvoiceParties.Resolve(document.Facts, snapshot.Data);
+        var previousFacts = current?.ReadFacts();
+        var facts = submission.Reading?.Facts ?? submission.Correction?.Facts ?? previousFacts;
+        var parties = facts is null ? null : InvoiceParties.Resolve(facts, snapshot.Data);
         var import = document is null
             ? null
-            : ClassifyImport(document, snapshot.Data, parties!, submission.Reading is null);
+            : ClassifyImport(
+                document,
+                facts!,
+                snapshot.Data,
+                parties!,
+                submission.Reading is null,
+                submission.Correction is null ? null : previousFacts,
+                current?.HasCorrectionConflict == true
+            );
         var (active, duplicate, original) = HandleDuplicate(
             document,
             import,
@@ -44,20 +53,28 @@ internal sealed class CaseAssessmentCalculator(
             current
         );
 
+        var correctedFacts = submission.Correction?.Facts
+            ?? (active == current?.Document ? current?.CorrectedFacts : null);
+        bool hasCorrectionConflict = duplicate is not null
+            ? current?.HasCorrectionConflict == true
+            : import?.IsCorrectionConflict == true;
         var inputs = new RevisionInputs(
             revision,
             snapshot,
             active,
-            current?.Proposals?.Items ?? []
+            current?.Proposals?.Items ?? [],
+            correctedFacts,
+            hasCorrectionConflict
         );
+        var activeFacts = inputs.Facts;
         var activeParties =
-            active is null ? null
+            activeFacts is null ? null
             : active == document ? parties
-            : InvoiceParties.Resolve(active.Facts, snapshot.Data);
+            : InvoiceParties.Resolve(activeFacts, snapshot.Data);
         var matching = active is null
             ? null
             : new ProposalMatching(
-                active.Facts,
+                activeFacts!,
                 active.ImportRevision,
                 snapshot.Data,
                 activeParties!
@@ -148,9 +165,12 @@ internal sealed class CaseAssessmentCalculator(
 
     private InvoiceImportMatch? ClassifyImport(
         InvoiceDocument document,
+        InvoiceFacts facts,
         CompanyData companyData,
         InvoiceParties parties,
-        bool isReassessment
+        bool isReassessment,
+        InvoiceFacts? previousFacts,
+        bool hasCorrectionConflict
     )
     {
         if (parties.Key is not { } key)
@@ -158,13 +178,15 @@ internal sealed class CaseAssessmentCalculator(
 
         var earlier = repository.ReadEarlierImports(document.CaseId);
         return InvoiceImportMatch.Find(
-            document.Facts,
+            facts,
             key,
             companyData,
             isReassessment
                 ? earlier.Where(item => item.Original.DocumentReference != document.Id)
                 : earlier,
-            isReassessment ? document.ContentSha256 : null
+            isReassessment ? document.ContentSha256 : null,
+            previousFacts,
+            hasCorrectionConflict
         );
     }
 
@@ -201,5 +223,8 @@ internal sealed record CaseSubmission(
     StepConfirmation[]? Confirmations = null,
     int? Step = null,
     int? ExpectedRevision = null,
-    bool RequireApplicableConfirmation = false
+    bool RequireApplicableConfirmation = false,
+    CorrectedReading? Correction = null
 );
+
+internal sealed record CorrectedReading(InvoiceFacts Facts, FactCorrection Audit);

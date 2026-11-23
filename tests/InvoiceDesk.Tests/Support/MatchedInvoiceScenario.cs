@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Cases;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Core.Validation;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,7 +78,7 @@ internal sealed record MatchedInvoiceScenario(InvoiceFacts Facts, CompanyData Co
                 MissingFields =
                 [
                     .. Facts.MissingFields,
-                    new("/purchase_order_reference", "not_present_in_document"),
+                    new("/purchase_order_reference", MissingReason.NotPresentInDocument),
                 ],
             },
         };
@@ -90,7 +91,11 @@ internal sealed record MatchedInvoiceScenario(InvoiceFacts Facts, CompanyData Co
                 Lines = [line, .. Facts.Lines.Skip(1)],
                 MissingFields =
                     line.Sku is null && Facts.Lines[0].Sku is not null
-                        ? [.. Facts.MissingFields, new("/lines/0/sku", "not_present_in_document")]
+                        ?
+                        [
+                            .. Facts.MissingFields,
+                            new("/lines/0/sku", MissingReason.NotPresentInDocument),
+                        ]
                         : Facts.MissingFields,
             },
         };
@@ -113,7 +118,7 @@ internal sealed record MatchedInvoiceScenario(InvoiceFacts Facts, CompanyData Co
                 MissingFields =
                 [
                     .. Facts.MissingFields,
-                    new("/bank/iban", "not_present_in_document"),
+                    new("/bank/iban", MissingReason.NotPresentInDocument),
                 ],
             },
         };

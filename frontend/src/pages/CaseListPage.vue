@@ -96,8 +96,12 @@ onMounted(async () => {
                 <DecisionTag :decision="item.decision" :stage="item.stage" />
               </td>
               <td>
-                <template v-if="item.stage === 'ready_for_accounting'">
-                  {{ simulatedHandover }}
+                <template v-if="item.tab === 'ready_for_accounting'">
+                  <template v-if="item.accepted_by">
+                    Accepted with discrepancy by {{ item.accepted_by }}
+                    <small>{{ simulatedHandover }}</small>
+                  </template>
+                  <template v-else>{{ simulatedHandover }}</template>
                   <small>
                     Revision {{ item.assessed_revision }} ·
                     {{ item.context_version }}

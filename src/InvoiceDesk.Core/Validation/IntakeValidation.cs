@@ -32,10 +32,17 @@ public static class IntakeValidation
         return step;
     }
 
-    public static InvoiceFacts ReadAgentFacts(JsonNode? json, string prefix)
+    public static InvoiceFacts ReadAgentFacts(JsonNode? json, string prefix) =>
+        ReadFacts(json, prefix, requireCompleteReading: true);
+
+    internal static InvoiceFacts ReadFacts(
+        JsonNode? json,
+        string prefix,
+        bool requireCompleteReading = false
+    )
     {
         var facts = Read<InvoiceFacts>("extraction", json, prefix);
-        ValidateFacts(facts, json!, prefix, requireCompleteReading: true);
+        ValidateFacts(facts, json!, prefix, requireCompleteReading);
         return facts;
     }
 
@@ -50,6 +57,25 @@ public static class IntakeValidation
             facts.Lines.Select(line => line.LineId),
             prefix + "/lines",
             "invoice line ID"
+        );
+
+        ValidateCode(
+            facts.Currency,
+            3,
+            prefix + "/currency",
+            "Use a three-letter currency code, e.g. EUR."
+        );
+        ValidateCode(
+            facts.Supplier.Country,
+            2,
+            prefix + "/supplier/country",
+            "Use a two-letter country code, e.g. DE."
+        );
+        ValidateCode(
+            facts.Buyer.Country,
+            2,
+            prefix + "/buyer/country",
+            "Use a two-letter country code, e.g. DE."
         );
 
         var missingPaths = new HashSet<string>(StringComparer.Ordinal);
@@ -97,6 +123,12 @@ public static class IntakeValidation
                     "Must reference a printed invoice field."
                 );
         }
+    }
+
+    private static void ValidateCode(string? value, int length, string path, string message)
+    {
+        if (value is not null && value.Length != length)
+            throw new InvoiceValidationException(path, message);
     }
 
     public static CompanyData ReadCompanyData(JsonNode? json, string prefix)

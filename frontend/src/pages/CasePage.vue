@@ -16,6 +16,7 @@ import InvoiceRecheck from '../components/InvoiceRecheck.vue'
 import ProposalReview from '../components/ProposalReview.vue'
 import ConflictDifferences from '../components/ConflictDifferences.vue'
 import InvoiceFactsPanel from '../components/InvoiceFactsPanel.vue'
+import DiscrepancyAcceptance from '../components/DiscrepancyAcceptance.vue'
 import ChecksTable from '../components/ChecksTable.vue'
 import DecisionTag from '../components/DecisionTag.vue'
 import InvoiceLineCard from '../components/InvoiceLineCard.vue'
@@ -62,6 +63,9 @@ const originalPdf = computed(() =>
     : undefined,
 )
 const result = computed(() => view.value?.revision.result)
+const correctableFacts = computed(() =>
+  view.value?.can_correct ? view.value.correctable_facts : [],
+)
 
 const totalsCheck = computed(() =>
   result.value?.checks.find((check) => check.code === 'TOTALS_ARITHMETIC'),
@@ -98,7 +102,7 @@ async function load(message = '') {
   }
 }
 
-async function refreshAfterProposal(message = '') {
+async function refreshLatest(message = '') {
   if (!props.revision) {
     await load(message)
     return
@@ -130,8 +134,12 @@ watch(
   <p v-else-if="view === null" role="status">Loading case…</p>
   <template v-else>
     <p v-if="actionMessage" role="status" class="card">{{ actionMessage }}</p>
-    <p v-if="view.superseded" class="card">
-      Revision {{ view.revision.number }} has been superseded.
+    <p v-if="revision" class="card">
+      {{
+        view.superseded
+          ? `Revision ${view.revision.number} has been superseded.`
+          : `Viewing saved revision ${view.revision.number}.`
+      }}
       <RouterLink :to="{ name: 'case', params: { caseId } }"
         >Open the latest</RouterLink
       >
@@ -196,7 +204,10 @@ watch(
           :stage="view.stage"
         />
         <p
-          v-if="view.stage !== 'not_read'"
+          v-if="
+            view.stage !== 'not_read' &&
+            (!view.show_duplicate_reading || view.stage === 'closed')
+          "
           class="stage"
           :class="{ 'stage-warning': view.stage === 'needs_attention' }"
         >
@@ -229,7 +240,12 @@ watch(
       </div>
     </section>
     <section
-      v-if="view.stage === 'ready_for_accounting' && !view.superseded"
+      v-if="
+        !view.superseded &&
+        !view.show_duplicate_reading &&
+        (view.stage === 'ready_for_accounting' ||
+          view.stage === 'accepted_with_discrepancy')
+      "
       class="card"
       aria-label="Accounting handover"
     >
@@ -275,19 +291,33 @@ watch(
       Case inputs changed after this assessment. A new assessment is required
       before accounting.
     </p>
+    <NeedsAttention
+      v-if="result && facts && !view.acceptance"
+      :key="'attention/' + caseId + '/' + view.current_revision"
+      :checks="result.checks"
+      :issues="view.issues"
+      :facts="facts"
+      :case-id="caseId"
+      :revision="view.current_revision"
+      :correctable-facts="correctableFacts"
+      @refresh="refreshLatest"
+    />
+    <DiscrepancyAcceptance
+      v-if="view.acceptance || (view.can_accept && view.revision.assessment_id)"
+      :key="'acceptance/' + caseId + '/' + view.current_revision"
+      :case-id="caseId"
+      :revision="view.current_revision"
+      :assessment-id="view.revision.assessment_id"
+      :acceptance="view.acceptance"
+      @refresh="refreshLatest"
+    />
     <template v-if="result && facts">
-      <NeedsAttention
-        :checks="result.checks"
-        :issues="view.issues"
-        :lines="facts.lines"
-        :currency="facts.currency"
-      />
       <ProposalReview
         v-if="view.proposals.length"
         :key="view.current_revision + '/' + view.revision.number"
         :view="view"
         :facts="facts"
-        @refresh="refreshAfterProposal"
+        @refresh="refreshLatest"
       />
       <ConflictDifferences
         v-if="original"
@@ -324,7 +354,16 @@ watch(
       />
       <ChecksTable :checks="result.checks" :facts="facts" />
     </template>
-    <InvoiceFactsPanel v-if="facts" :facts="facts" :pdf="pdf" />
+    <InvoiceFactsPanel
+      v-if="facts"
+      :key="caseId"
+      :facts="facts"
+      :pdf="pdf"
+      :case-id="caseId"
+      :revision="view.current_revision"
+      :correctable-facts="correctableFacts"
+      @refresh="refreshLatest"
+    />
     <p v-else class="waiting-note">The agent has not read this invoice yet.</p>
     <details class="card company-data">
       <summary>

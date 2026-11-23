@@ -40,44 +40,12 @@ public sealed class PublicProposalLifecycleTests
                     caseId
                 )
             )["result"]!;
-            AssertOutcome(
-                initial,
-                "needs_information",
-                "DOC-010",
-                ["L01", "L02"],
-                [
-                    new("ORDER_MATCH", "DOC-010", "unknown"),
-                    Dependent("SUPPLIER_IDENTITY", "DOC-010", "ORDER_MATCH"),
-                    Dependent("BUYER_IDENTITY", "DOC-010", "ORDER_MATCH"),
-                    Dependent("CURRENCY_MATCH", "DOC-010", "ORDER_MATCH"),
-                    .. ComparisonsWithoutOrder("L01"),
-                    .. ComparisonsWithoutOrder("L02"),
-                ],
-                [("order_reference", "DOC-010")],
-                null,
-                null,
-                lineMatchSources: [null, null]
-            );
-            AssertLine(initial, "L01", null, null, "35.00", "7.00", null, null, null, null, null);
-            AssertLine(initial, "L02", null, null, "375.00", "75.00", null, null, null, null, null);
+            AssertNeedsInformation(initial);
 
             var proposed = Payload(await Propose(mcp, steps[1]["proposals"]![0]!, caseId))[
                 "result"
             ]!;
-            AssertOutcome(
-                proposed,
-                "needs_review",
-                "DOC-010",
-                ["L01", "L02"],
-                [
-                    new("ORDER_MATCH", "DOC-010", "fail", "needs_review"),
-                    new("LINE_MATCH", "L01", "fail", "needs_review"),
-                ],
-                matchedOrderId: "ORD-010",
-                orderMatchSource: "agent_proposal",
-                lineMatchSources: ["agent_proposal", "deterministic"]
-            );
-            AssertLines(proposed, "agent_proposal");
+            AssertAppliedProposal(proposed);
 
             using var response = await Confirm(
                 page,
@@ -98,8 +66,7 @@ public sealed class PublicProposalLifecycleTests
             );
             AssertLines(confirmed, "human_confirmation");
             results.AddRange([confirmed, proposed, initial]);
-            foreach (var result in results)
-                AssertTotals(result, "410.00", "82.00", "492.00");
+            AssertTotals(confirmed, "410.00", "82.00", "492.00");
 
             var recheck = Payload(await Call(mcp, "assess_invoice", caseId));
             Assert.True(recheck["inputs_unchanged"]!.GetValue<bool>());
@@ -147,6 +114,50 @@ public sealed class PublicProposalLifecycleTests
             );
             AssertSameJson(results[index], saved["revision"]!["result"]);
         }
+    }
+
+    internal static void AssertNeedsInformation(JsonNode result)
+    {
+        AssertOutcome(
+            result,
+            "needs_information",
+            "DOC-010",
+            ["L01", "L02"],
+            [
+                new("ORDER_MATCH", "DOC-010", "unknown"),
+                Dependent("SUPPLIER_IDENTITY", "DOC-010", "ORDER_MATCH"),
+                Dependent("BUYER_IDENTITY", "DOC-010", "ORDER_MATCH"),
+                Dependent("CURRENCY_MATCH", "DOC-010", "ORDER_MATCH"),
+                .. ComparisonsWithoutOrder("L01"),
+                .. ComparisonsWithoutOrder("L02"),
+            ],
+            [("order_reference", "DOC-010")],
+            null,
+            null,
+            lineMatchSources: [null, null]
+        );
+        AssertLine(result, "L01", null, null, "35.00", "7.00", null, null, null, null, null);
+        AssertLine(result, "L02", null, null, "375.00", "75.00", null, null, null, null, null);
+        AssertTotals(result, "410.00", "82.00", "492.00");
+    }
+
+    internal static void AssertAppliedProposal(JsonNode result)
+    {
+        AssertOutcome(
+            result,
+            "needs_review",
+            "DOC-010",
+            ["L01", "L02"],
+            [
+                new("ORDER_MATCH", "DOC-010", "fail", "needs_review"),
+                new("LINE_MATCH", "L01", "fail", "needs_review"),
+            ],
+            matchedOrderId: "ORD-010",
+            orderMatchSource: "agent_proposal",
+            lineMatchSources: ["agent_proposal", "deterministic"]
+        );
+        AssertLines(result, "agent_proposal");
+        AssertTotals(result, "410.00", "82.00", "492.00");
     }
 
     private static void AssertLines(JsonNode result, string source)

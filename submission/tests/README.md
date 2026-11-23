@@ -1,8 +1,24 @@
 # API regression and rule scenario index
 
-`dotnet test InvoiceDesk.slnx -c Release --no-build` on Linux x64 with SDK 10.0.100 passed **216/216** tests in **18.81 seconds** wall time. VSTest reported 15 seconds of test execution.
+`dotnet test InvoiceDesk.slnx -c Release --no-build` on Linux x64 with SDK 10.0.100 passed **248/248** tests in **20.43 seconds** wall time. VSTest reported 16 seconds of test execution.
 
 The [new-invoice API test](../../tests/InvoiceDesk.Tests/Api/NewInvoiceRegistrationTests.cs) starts with an unread [hand-authored PDF and facts pair](../../tests/InvoiceDesk.Tests/Fixtures/case-912/), registers the facts through MCP and checks the saved evidence and all rule verdicts. Existing API tests cover case 004, the full 010 lifecycle across restart, invalid inputs and context replacement.
+
+Stage 06 adds these page API checks with saved history and PDF assertions:
+
+| Workflow | API test |
+| --- | --- |
+| Accept case 004, keep its rules result and allow a fresh acceptance after a duplicate | [Should_keep_rules_result_unchanged_when_a_person_accepts_an_eligible_discrepancy](../../tests/InvoiceDesk.Tests/Api/DiscrepancyAcceptanceTests.cs) |
+| Reject blocked, needs-information, proposal-dependent, stale, blank and mismatched-assessment requests | [Should_reject_without_writes_when_acceptance_is_ineligible](../../tests/InvoiceDesk.Tests/Api/DiscrepancyAcceptanceTests.cs) |
+| End acceptance after a context, proposal, confirmation, correction or duplicate revision | [Should_expire_acceptance_when_any_new_revision_is_created](../../tests/InvoiceDesk.Tests/Api/DiscrepancyAcceptanceTests.cs) |
+| Correct case 102 from 64.00 to 6.40 while retaining the document, quotes, PDF and old result, and block a separate reading corrected to match the original | [Should_clear_same_document_when_a_person_corrects_the_misread_price](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
+| Preserve R6 when correcting payment terms in the presence of an equal counted original | [Should_preserve_reassessment_classification_when_only_payment_terms_are_corrected](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
+| Block a corrected invoice number that reveals a match with counted history, including later reassessments | [Should_block_against_counted_original_when_correcting_the_invoice_number_reveals_a_match](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
+| Preserve the accepted stage and history when the submitted value is unchanged | [Should_preserve_acceptance_when_a_correction_leaves_the_value_unchanged](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
+| Reject a missing reason when the corrected value is present | [Should_reject_a_missing_reason_when_the_corrected_value_is_present](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
+| Require a missing reason, remove it when a reading is restored and keep the citations | [Should_update_missing_reason_when_a_nullable_fact_is_corrected](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
+| Reject malformed decimals, dates and codes, protected fields, blank audit reason and stale revisions | [Should_preserve_history_when_correction_is_invalid_or_targets_protected_data](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
+| Reopen SQLite and verify saved acceptance, correction, history and the fixture allow-list | [Should_preserve_human_resolution_when_the_app_restarts](../../tests/InvoiceDesk.Tests/Api/FactCorrectionTests.cs) |
 
 Each row lists the API test and the scenarios it exercises. H-39 also links the runner actor validation.
 

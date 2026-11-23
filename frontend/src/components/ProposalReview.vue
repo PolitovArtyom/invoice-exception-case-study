@@ -4,6 +4,7 @@ import {
   ActionError,
   confirmProposal,
   previewConfirmation,
+  staleHumanActionMessage,
   type CaseView,
   type InvoiceFacts,
   type ProposalView,
@@ -14,8 +15,6 @@ import ProposalLineMapping from './ProposalLineMapping.vue'
 
 const props = defineProps<{ view: CaseView; facts: InvoiceFacts }>()
 const emit = defineEmits<{ refresh: [message?: string] }>()
-const staleMessage =
-  'The case changed. The latest revision is shown. Review the proposal before confirming.'
 const selectedId = ref(
   props.view.effective_proposal_id ??
     props.view.proposals[0]?.registration.proposal.proposal_id,
@@ -53,7 +52,7 @@ watch(
       )
       if (request.signal.aborted) return
       if (response.expected_revision !== props.view.current_revision) {
-        emit('refresh', staleMessage)
+        emit('refresh', staleHumanActionMessage)
         return
       }
       preview.value = response
@@ -124,7 +123,7 @@ async function confirm() {
       failure instanceof ActionError &&
       failure.field === '/expected_revision'
     )
-      emit('refresh', staleMessage)
+      emit('refresh', staleHumanActionMessage)
     else error.value = message
   } finally {
     busy.value = false

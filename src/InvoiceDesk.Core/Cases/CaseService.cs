@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using InvoiceDesk.Core.Cases.HumanResolution;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Storage;
@@ -71,7 +73,7 @@ public sealed class CaseService(
             );
 
         var data = updateJson is null ? null : ReadCompanyDataUpdate(updateJson);
-        if (data is null || InvoiceJson.SameCompanyData(data, current.Snapshot.Data))
+        if (data is null || InvoiceJson.SameValues(data, current.Snapshot.Data))
         {
             var saved = repository.ReadAssessmentOrLatestRevision(invoiceCase);
             if (!repository.InputsChanged(invoiceCase, saved))
@@ -112,13 +114,63 @@ public sealed class CaseService(
         return IntakeValidation.ReadCompanyData(data, "/context");
     }
 
+    public DiscrepancyAcceptance AcceptDiscrepancy(string caseId, AcceptanceForm form)
+    {
+        string person = PageActionValidation.RequirePerson(form.Person, "/person");
+        string reason = PageActionValidation.RequireReason(form.Reason);
+        using var transaction = repository.BeginUpdate();
+        var invoiceCase = RequireCase(caseId);
+        var current = repository.FindCurrentRevisionForUpdate(invoiceCase)!;
+        PageActionValidation.RequireLatestRevision(form.ExpectedRevision, current);
+        var assessed = repository.ReadAssessmentOrLatestRevision(invoiceCase);
+        string assessmentId = CaseReader.AssessmentId(assessed.Number);
+        if (
+            form.AssessmentId != assessmentId
+            || !ResolutionEligibility.CanAccept(
+                assessed,
+                current.Acceptance,
+                repository.InputsChanged(invoiceCase, assessed)
+            )
+        )
+            throw new InvoiceValidationException(
+                "/assessment_id",
+                "The current assessment is ineligible for discrepancy acceptance."
+            );
+
+        var acceptance = new DiscrepancyAcceptance(assessmentId, person, reason, clock.GetUtcNow());
+        repository.AcceptDiscrepancy(current, acceptance);
+        transaction.Commit();
+        return acceptance;
+    }
+
+    public AssessmentResponse CorrectFact(string caseId, FactCorrectionForm form)
+    {
+        string person = PageActionValidation.RequirePerson(form.Person, "/person");
+        string reason = PageActionValidation.RequireReason(form.Reason);
+        using var transaction = repository.BeginUpdate();
+        var invoiceCase = RequireCase(caseId);
+        var current = repository.FindCurrentRevisionForUpdate(invoiceCase)!;
+        PageActionValidation.RequireLatestRevision(form.ExpectedRevision, current);
+        var facts = current.ReadFacts()
+            ?? throw new InvoiceValidationException(
+                "/field_path",
+                "There is no active invoice reading to correct."
+            );
+        var (corrected, audit) = FactCorrections.Correct(facts, form, person, reason);
+        var result = Apply(
+            invoiceCase,
+            current,
+            new(Correction: new(corrected, audit)),
+            RevisionKind.CorrectFact,
+            RevisionActor.Human
+        )!;
+        transaction.Commit();
+        return Response(result);
+    }
+
     public AssessmentResponse ConfirmProposal(string caseId, ConfirmationForm form)
     {
-        if (string.IsNullOrWhiteSpace(form.ConfirmedBy) || form.ConfirmedBy.Length > 128)
-            throw new InvoiceValidationException(
-                "/confirmed_by",
-                "Enter a name of up to 128 characters."
-            );
+        string person = PageActionValidation.RequirePerson(form.ConfirmedBy, "/confirmed_by");
         if (!form.SupportingDocumentsReviewed)
             throw new InvoiceValidationException(
                 "/supporting_documents_reviewed",
@@ -127,7 +179,7 @@ public sealed class CaseService(
 
         return Update(
             caseId,
-            PageConfirmation(form.ProposalId, form.ConfirmedBy.Trim(), form.ExpectedRevision),
+            PageConfirmation(form.ProposalId, person, form.ExpectedRevision),
             RevisionKind.ConfirmProposal,
             RevisionActor.Human
         )!;
@@ -192,11 +244,8 @@ public sealed class CaseService(
         using var transaction = repository.BeginUpdate();
         var invoiceCase = RequireCase(caseId);
         var current = repository.FindCurrentRevisionForUpdate(invoiceCase)!;
-        if (submission.ExpectedRevision is { } expected && expected != current.Number)
-            throw new InvoiceValidationException(
-                "/expected_revision",
-                "The case changed. Open the latest revision and review the proposal again."
-            );
+        if (submission.ExpectedRevision is { } expected)
+            PageActionValidation.RequireLatestRevision(expected, current);
 
         var result = Apply(invoiceCase, current, submission, kind, actor);
         transaction.Commit();
@@ -238,7 +287,8 @@ public sealed class CaseService(
             computed.Result?.Decision is null ? null : computed.Result,
             action,
             computed.Original,
-            computed.Duplicate
+            computed.Duplicate,
+            submission.Correction?.Audit
         );
         return computed.Result;
     }

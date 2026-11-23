@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Tests.Support;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
 
@@ -61,7 +62,7 @@ public sealed class OrderMatchingTests
                     MissingFields =
                     [
                         .. baseline.Facts.MissingFields,
-                        new("/supplier/registration_id", "not_present_in_document"),
+                        new("/supplier/registration_id", MissingReason.NotPresentInDocument),
                     ],
                 },
             }
@@ -107,7 +108,7 @@ public sealed class OrderMatchingTests
                     MissingFields =
                     [
                         .. baseline.Facts.MissingFields,
-                        new("/buyer/registration_id", "not_present_in_document"),
+                        new("/buyer/registration_id", MissingReason.NotPresentInDocument),
                     ],
                 },
             }

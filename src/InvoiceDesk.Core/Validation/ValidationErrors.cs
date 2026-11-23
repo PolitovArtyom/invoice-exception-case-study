@@ -50,7 +50,10 @@ internal static class ValidationErrors
                 }
                 else
                 {
-                    yield return new(prefix + pointer, message);
+                    yield return new(
+                        prefix + pointer,
+                        keyword == "pattern" ? PatternMessage(result, message) : message
+                    );
                 }
             }
         }
@@ -70,6 +73,17 @@ internal static class ValidationErrors
         bool IsAlternative(EvaluationResults child) =>
             child.EvaluationPath.ToString().StartsWith(alternativesPath, StringComparison.Ordinal);
     }
+
+    private static string PatternMessage(EvaluationResults result, string message) =>
+        result.SchemaLocation.Fragment switch
+        {
+            "#/$defs/money" => "Use a number with two decimal places, e.g. 6.40.",
+            "#/$defs/quantity" =>
+                "Use a positive number with up to three decimal places, e.g. 3.125.",
+            "#/$defs/tax_rate" =>
+                "Use a rate from 0 to 1 with up to four decimal places, e.g. 0.20.",
+            _ => message,
+        };
 
     private static IEnumerable<string> RequiredNames(string message) =>
         message.Split('"').Where((_, index) => index % 2 == 1);

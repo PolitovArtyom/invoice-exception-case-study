@@ -1,5 +1,7 @@
+using InvoiceDesk.Core.Cases.HumanResolution;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Core.Model.Results;
 using InvoiceDesk.Core.Rules.Matching;
 using InvoiceDesk.Core.Rules.Parties;
@@ -13,7 +15,9 @@ public sealed class CaseReader(CaseRepository repository)
     {
         var cases = repository
             .List()
-            .Select(item => Summarize(item.Case, item.Revision, item.InputsChanged))
+            .Select(item =>
+                Summarize(item.Case, item.Revision, item.Acceptance, item.InputsChanged)
+            )
             .ToArray();
         return new(
             new(
@@ -42,7 +46,13 @@ public sealed class CaseReader(CaseRepository repository)
             return null;
 
         var revision = repository.ReadRevision(caseId, revisionNumber);
-        return revision?.Result is null ? null : ReadView(invoiceCase, revision, historical: true);
+        return revision?.Result is null
+            ? null
+            : ReadView(
+                invoiceCase,
+                revision,
+                historical: revisionNumber != invoiceCase.CurrentRevision
+            );
     }
 
     public CaseView? ReadRevisionView(string caseId, int revisionNumber)
@@ -63,6 +73,13 @@ public sealed class CaseReader(CaseRepository repository)
         bool superseded = historical && revision.Number != invoiceCase.CurrentRevision;
         var saved = View(revision);
         bool inputsChanged = repository.InputsChanged(invoiceCase, revision);
+        var acceptance = historical
+            ? revision.Acceptance
+            : repository.ReadCurrentAcceptance(invoiceCase, revision);
+        var correctable =
+            !historical && saved.Document is { } active && !saved.IsDuplicateAttempt
+                ? FactCorrections.Fields(active.Facts)
+                : [];
         int? latestDuplicateRevision =
             !historical
             && revision.Document is { } document
@@ -75,6 +92,7 @@ public sealed class CaseReader(CaseRepository repository)
                 : null;
         var (proposals, effective, openOrders) = ReadProposals(
             revision,
+            saved.Document?.Facts,
             !superseded && !inputsChanged
         );
         bool showDuplicateReading =
@@ -84,7 +102,7 @@ public sealed class CaseReader(CaseRepository repository)
         return new(
             invoiceCase.Metadata,
             invoiceCase.CurrentRevision,
-            Stage(revision, !historical && inputsChanged),
+            Stage(revision, acceptance, !historical && inputsChanged),
             saved,
             inputsChanged,
             latestDuplicateRevision,
@@ -93,7 +111,11 @@ public sealed class CaseReader(CaseRepository repository)
             proposals,
             effective,
             openOrders,
-            CaseIssues.For(revision.Result)
+            CaseIssues.For(revision.Result, saved.Document?.Facts),
+            acceptance,
+            !historical && ResolutionEligibility.CanAccept(revision, acceptance, inputsChanged),
+            correctable.Length > 0,
+            correctable
         );
     }
 
@@ -101,20 +123,20 @@ public sealed class CaseReader(CaseRepository repository)
         ProposalView[] Proposals,
         string? Effective,
         PurchaseOrder[] OpenOrders
-    ) ReadProposals(CaseRevision revision, bool canReview)
+    ) ReadProposals(CaseRevision revision, InvoiceFacts? facts, bool canReview)
     {
-        if (revision.Document is not { } document)
+        if (facts is null)
             return ([], null, []);
 
         var data = revision.Snapshot.Data;
-        var parties = InvoiceParties.Resolve(document.Facts, data);
+        var parties = InvoiceParties.Resolve(facts, data);
         var registered = revision.Proposals?.Items ?? [];
         var options =
             registered.Length == 0
                 ? []
                 : new ProposalMatching(
-                    document.Facts,
-                    document.ImportRevision,
+                    facts,
+                    revision.Document!.ImportRevision,
                     data,
                     parties
                 ).Options(registered);
@@ -193,24 +215,27 @@ public sealed class CaseReader(CaseRepository repository)
                     document.Id,
                     document.ContentSha256,
                     document.Source,
-                    document.Facts,
+                    revision.ReadFacts()!,
                     document.ReadingOrigin
                 ),
             revision.Result is null ? null : AssessmentId(revision.Number),
             revision.Result,
             revision.OriginalInvoice,
-            revision.DuplicateAttempt
+            revision.DuplicateAttempt,
+            revision.Acceptance,
+            revision.Correction
         );
     }
 
     private static CaseSummary Summarize(
         InvoiceCase invoiceCase,
         CaseRevision revision,
+        DiscrepancyAcceptance? acceptance,
         bool inputsChanged
     )
     {
-        var facts = revision.Document?.Facts ?? revision.DuplicateAttempt?.Reading.Facts;
-        var stage = Stage(revision, inputsChanged);
+        var facts = revision.ReadFacts() ?? revision.DuplicateAttempt?.Reading.Facts;
+        var stage = Stage(revision, acceptance, inputsChanged);
         var mainIssue = CaseIssues.MainIssue(revision.Result);
         return new(
             invoiceCase.Id,
@@ -227,20 +252,28 @@ public sealed class CaseReader(CaseRepository repository)
             mainIssue?.Check.Code,
             mainIssue?.Owner,
             revision.Result?.InputRevision,
-            revision.Result?.ContextVersion
+            revision.Result?.ContextVersion,
+            acceptance?.Person
         );
     }
 
     private static CaseTab Tab(CaseStage stage) =>
         stage switch
         {
-            CaseStage.ReadyForAccounting => CaseTab.ReadyForAccounting,
+            CaseStage.ReadyForAccounting or CaseStage.AcceptedWithDiscrepancy =>
+                CaseTab.ReadyForAccounting,
             CaseStage.Closed => CaseTab.Closed,
             _ => CaseTab.NeedsAttention,
         };
 
-    private static CaseStage Stage(CaseRevision revision, bool inputsChanged)
+    private static CaseStage Stage(
+        CaseRevision revision,
+        DiscrepancyAcceptance? acceptance,
+        bool inputsChanged
+    )
     {
+        if (acceptance is not null && !inputsChanged)
+            return CaseStage.AcceptedWithDiscrepancy;
         if (revision.Document is null)
             return revision.DuplicateAttempt is null ? CaseStage.NotRead : CaseStage.Closed;
 

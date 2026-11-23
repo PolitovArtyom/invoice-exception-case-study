@@ -1,16 +1,29 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { CaseIssue, InvoiceCheck, InvoiceLine } from '../api'
+import { computed, ref } from 'vue'
+import type {
+  CaseIssue,
+  CorrectableFact,
+  InvoiceCheck,
+  InvoiceFacts,
+} from '../api'
 import { checkTitle, isLineCheck, issueOwnerLabel } from '../checkPresentation'
 import { formatAmount, formatDecimal } from '../formatDecimal'
 import CheckVerdict from './CheckVerdict.vue'
+import InvoiceFactSource from './InvoiceFactSource.vue'
 
 const props = defineProps<{
   checks: InvoiceCheck[]
   issues: CaseIssue[]
-  lines: InvoiceLine[]
-  currency: string | null
+  facts: InvoiceFacts
+  caseId: string
+  revision: number
+  correctableFacts: CorrectableFact[]
 }>()
+const emit = defineEmits<{ refresh: [message: string] }>()
+const editing = ref('')
+const editable = computed(
+  () => new Map(props.correctableFacts.map((field) => [field.path, field])),
+)
 
 const waiting = computed(() => {
   const counts = new Map<string, number>()
@@ -27,42 +40,21 @@ function amount(value: unknown) {
 
 function money(value: unknown) {
   return typeof value === 'string'
-    ? formatAmount(value, props.currency)
+    ? formatAmount(value, props.facts.currency)
     : 'unknown'
 }
 
-const arithmeticAmounts = [
-  ['Net', 'declared_net_amount', 'calculated_net'],
-  ['Line tax', 'declared_tax_amount', 'calculated_tax'],
-  ['Subtotal', 'declared_subtotal', 'calculated_subtotal'],
-  ['Tax total', 'declared_tax_total', 'calculated_tax_total'],
-  ['Invoice total', 'declared_total', 'calculated_total'],
-] as const
-
-function decimalKey(value: string) {
-  return value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
-}
-
-function describeArithmetic(check: InvoiceCheck) {
-  return arithmeticAmounts
-    .flatMap(([label, declared, calculated]) => {
-      const invoiceAmount = check.actual?.[declared]?.value
-      const calculatedAmount = check.expected?.[calculated]?.value
-      if (
-        typeof invoiceAmount !== 'string' ||
-        typeof calculatedAmount !== 'string' ||
-        decimalKey(invoiceAmount) === decimalKey(calculatedAmount)
-      )
-        return []
-
-      return [
-        `${label} is ${money(invoiceAmount)} on the invoice and ${money(calculatedAmount)} when calculated.`,
-      ]
-    })
+function describeArithmetic(facts: CaseIssue['facts']) {
+  return facts
+    .filter((fact) => fact.calculated_value !== null)
+    .map(
+      ({ label, value, calculated_value }) =>
+        `${label} was read as ${money(value)} and calculated as ${money(calculated_value)}.`,
+    )
     .join(' ')
 }
 
-function describe(check: InvoiceCheck) {
+function describe({ check, facts }: CaseIssue) {
   const actual = check.actual
   const expected = check.expected
   if (check.status === 'unknown') {
@@ -119,7 +111,7 @@ function describe(check: InvoiceCheck) {
       }
     case 'UNIT_PRICE':
       return {
-        detail: `Invoice unit price ${money(actual?.unit_net_price?.value)} and order unit price ${money(expected?.unit_net_price?.value)} differ by ${money(actual?.absolute_difference?.value)}. The tolerance is ${money(expected?.inclusive_tolerance?.value)}.`,
+        detail: `Read unit price ${money(actual?.unit_net_price?.value)} and order unit price ${money(expected?.unit_net_price?.value)} differ by ${money(actual?.absolute_difference?.value)}. The tolerance is ${money(expected?.inclusive_tolerance?.value)}.`,
         guidance:
           'Update the order if the price was agreed. Otherwise, request a corrected invoice.',
       }
@@ -127,7 +119,7 @@ function describe(check: InvoiceCheck) {
     case 'TOTALS_ARITHMETIC':
       return {
         detail:
-          describeArithmetic(check) ||
+          describeArithmetic(facts) ||
           'The declared amounts differ from the calculation.',
         guidance: 'Compare the amounts with the PDF.',
       }
@@ -142,14 +134,23 @@ function describe(check: InvoiceCheck) {
   }
 }
 const entries = computed(() =>
-  props.issues.map(({ check, owner }) => ({
-    check,
-    owner,
-    ...describe(check),
-    line: isLineCheck(check)
-      ? props.lines.find((line) => line.line_id === check.object_id)
-      : undefined,
-  })),
+  props.issues.map((issue) => {
+    const { check, owner, facts } = issue
+    const lineIndex = isLineCheck(check)
+      ? props.facts.lines.findIndex((line) => line.line_id === check.object_id)
+      : -1
+    return {
+      key: `${check.code}/${check.object_id}`,
+      check,
+      owner,
+      ...describe(issue),
+      line: props.facts.lines[lineIndex],
+      sources: facts.map((fact) => ({
+        ...fact,
+        field: editable.value.get(fact.path),
+      })),
+    }
+  }),
 )
 </script>
 
@@ -162,8 +163,16 @@ const entries = computed(() =>
     <h2 id="attention-heading">Needs attention</h2>
     <ul class="attention-list">
       <li
-        v-for="{ check, owner, line, detail, guidance } in entries"
-        :key="`${check.code}/${check.object_id}`"
+        v-for="{
+          key,
+          check,
+          owner,
+          line,
+          detail,
+          guidance,
+          sources,
+        } in entries"
+        :key="key"
       >
         <div class="check-heading">
           <strong>{{ checkTitle(check.code) }}</strong>
@@ -175,6 +184,26 @@ const entries = computed(() =>
           </strong>
           {{ detail }}
         </p>
+        <div
+          v-for="{ path, label, value, field, quotes } in sources"
+          :key="path"
+        >
+          <p>
+            {{ label }} read as <span class="mono">{{ value }}</span>
+          </p>
+          <InvoiceFactSource
+            :case-id="caseId"
+            :revision="revision"
+            :label="label"
+            :value="value"
+            :field="field"
+            :quotes="quotes"
+            :editing="editing === key + path"
+            @edit="editing = key + path"
+            @cancel="editing = ''"
+            @refresh="emit('refresh', $event)"
+          />
+        </div>
         <p class="muted">
           <strong>{{ issueOwnerLabel(owner) }}</strong>
           <template v-if="guidance"> · {{ guidance }}</template>

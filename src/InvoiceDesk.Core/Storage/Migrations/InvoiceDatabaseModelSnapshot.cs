@@ -24,8 +24,17 @@ namespace InvoiceDesk.Core.Storage.Migrations
                     b.Property<int>("Number")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Acceptance")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Action")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CorrectedFacts")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Correction")
                         .HasColumnType("TEXT");
 
                     b.Property<long?>("DocumentId")
@@ -33,6 +42,9 @@ namespace InvoiceDesk.Core.Storage.Migrations
 
                     b.Property<string>("DuplicateAttempt")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("HasCorrectionConflict")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("OriginalInvoice")
                         .HasColumnType("TEXT");

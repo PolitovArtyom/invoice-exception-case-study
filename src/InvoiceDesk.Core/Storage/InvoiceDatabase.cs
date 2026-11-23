@@ -1,5 +1,6 @@
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Model.CompanyData;
+using InvoiceDesk.Core.Model.HumanResolution;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -61,6 +62,15 @@ public sealed class InvoiceDatabase(DbContextOptions<InvoiceDatabase> options) :
         revisions
             .Property(row => row.Proposals)
             .HasConversion(new InvoiceJsonConversion<StoredProposals?>());
+        revisions
+            .Property(row => row.Acceptance)
+            .HasConversion(new InvoiceJsonConversion<DiscrepancyAcceptance?>());
+        revisions
+            .Property(row => row.CorrectedFacts)
+            .HasConversion(new InvoiceJsonConversion<InvoiceFacts?>());
+        revisions
+            .Property(row => row.Correction)
+            .HasConversion(new InvoiceJsonConversion<FactCorrection?>());
         revisions
             .Property(row => row.Result)
             .HasConversion(new InvoiceJsonConversion<Model.Results.InvoiceResult?>());

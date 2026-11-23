@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Model;
+using InvoiceDesk.Core.Model.HumanResolution;
 using InvoiceDesk.Tests.Support;
 using static InvoiceDesk.Tests.Support.AssessmentAssertions;
 using static InvoiceDesk.Tests.Support.InvoiceApiClient;
@@ -116,8 +117,8 @@ public sealed class InvoiceDuplicateTests
                 ],
                 MissingFields =
                 [
-                    new("/lines/0/sku", "not_present_in_document"),
-                    new("/lines/1/sku", "not_present_in_document"),
+                    new("/lines/0/sku", MissingReason.NotPresentInDocument),
+                    new("/lines/1/sku", MissingReason.NotPresentInDocument),
                 ],
                 DeclaredSubtotal = 30.00m,
                 DeclaredTaxTotal = 6.00m,
@@ -205,7 +206,7 @@ public sealed class InvoiceDuplicateTests
                 },
                 scenario.Facts.Lines[2],
             ],
-            MissingFields = [new("/lines/0/sku", "not_present_in_document")],
+            MissingFields = [new("/lines/0/sku", MissingReason.NotPresentInDocument)],
         };
         var conflict = Payload(
             await Register(mcp, RawFacts(changedMultiplicity), Source(second: true))

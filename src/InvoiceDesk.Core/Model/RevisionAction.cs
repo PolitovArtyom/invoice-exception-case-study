@@ -19,6 +19,7 @@ public enum RevisionKind
     ConfirmProposal,
     ReplaceCompanyData,
     RecheckInvoice,
+    CorrectFact,
 }
 
 public enum RevisionActor

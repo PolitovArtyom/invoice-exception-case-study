@@ -22,6 +22,7 @@ export interface CaseSummary {
   main_issue_owner: IssueOwner | null
   assessed_revision: number | null
   context_version: string | null
+  accepted_by: string | null
 }
 
 interface CaseList {
@@ -87,9 +88,32 @@ export interface InvoiceEvidence {
   excerpt: string
 }
 
+export type MissingReason = 'not_present_in_document' | 'illegible'
+
 export interface InvoiceMissingField {
   field_path: string
-  reason: 'not_present_in_document' | 'illegible'
+  reason: MissingReason
+}
+
+export interface DiscrepancyAcceptance {
+  assessment_id: string
+  person: string
+  reason: string
+  recorded_at: string
+}
+
+export interface FactCorrection {
+  field_path: string
+  previous_value: string | null
+  value: string | null
+  missing_reason: MissingReason | null
+  person: string
+  reason: string
+}
+
+export interface CorrectableFact {
+  path: string
+  can_be_missing: boolean
 }
 
 export interface InvoiceResult {
@@ -120,6 +144,13 @@ export interface InvoiceCheck {
 export interface CaseIssue {
   check: InvoiceCheck
   owner: IssueOwner
+  facts: {
+    path: string
+    label: string
+    value: string
+    calculated_value: string | null
+    quotes: InvoiceEvidence[]
+  }[]
 }
 
 export interface CheckOperand {
@@ -163,6 +194,10 @@ export interface CaseView {
   }
   issues: CaseIssue[]
   stage: CaseStage
+  acceptance: DiscrepancyAcceptance | null
+  can_accept: boolean
+  can_correct: boolean
+  correctable_facts: CorrectableFact[]
   revision: RevisionView
 }
 
@@ -180,6 +215,7 @@ export interface RevisionView {
       | 'confirm_proposal'
       | 'replace_company_data'
       | 'recheck_invoice'
+      | 'correct_fact'
     actor: 'trusted_loader' | 'agent' | 'human' | 'runner'
     recorded_at: string
     proposal_ids: string[] | null
@@ -195,6 +231,8 @@ export interface RevisionView {
   } | null
   result: InvoiceResult | null
   original_invoice: { document_id: string } | null
+  acceptance: DiscrepancyAcceptance | null
+  correction: FactCorrection | null
   is_duplicate_attempt: boolean
   duplicate_attempt: {
     reading: {
@@ -263,6 +301,9 @@ interface ConfirmationPreview {
   result: InvoiceResult
 }
 
+export const staleHumanActionMessage =
+  'The case changed. The page has refreshed to the latest revision. Review the case and submit again.'
+
 export class ActionError extends Error {
   constructor(
     message: string,
@@ -315,15 +356,49 @@ export async function confirmProposal(
   name: string,
   reviewed: boolean,
 ) {
-  await request(`${casePath(caseId)}/confirmations`, {
+  await postJson(`${casePath(caseId)}/confirmations`, {
+    proposal_id: preview.proposal_id,
+    expected_revision: preview.expected_revision,
+    confirmed_by: name,
+    supporting_documents_reviewed: reviewed,
+  })
+}
+
+interface HumanActionForm {
+  expected_revision: number
+  person: string
+  reason: string
+}
+
+export function recordDiscrepancyAcceptance(
+  caseId: string,
+  form: HumanActionForm & { assessment_id: string },
+) {
+  return postJson<DiscrepancyAcceptance>(
+    `${casePath(caseId)}/discrepancy-acceptances`,
+    form,
+  )
+}
+
+export function correctFact(
+  caseId: string,
+  form: HumanActionForm & {
+    field_path: string
+    value: string | null
+    missing_reason: MissingReason | null
+  },
+) {
+  return postJson<{ result: InvoiceResult }>(
+    `${casePath(caseId)}/fact-corrections`,
+    form,
+  )
+}
+
+function postJson<T>(path: string, form: object) {
+  return request<T>(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      proposal_id: preview.proposal_id,
-      expected_revision: preview.expected_revision,
-      confirmed_by: name,
-      supporting_documents_reviewed: reviewed,
-    }),
+    body: JSON.stringify(form),
   })
 }
 

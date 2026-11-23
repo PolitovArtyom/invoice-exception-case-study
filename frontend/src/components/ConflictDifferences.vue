@@ -27,15 +27,18 @@ const comparison = computed(() => {
     ComparedFacts | undefined
   if (!original || !current) return
   const keys = Object.keys(fields) as (keyof typeof fields)[]
+  const differences = keys
+    .filter((key) => original[key] !== current[key])
+    .map((key) => ({
+      name: fields[key],
+      original: original[key],
+      current: current[key],
+    }))
+  const lines = [original.lines, current.lines]
   return {
-    differences: keys
-      .filter((key) => original[key] !== current[key])
-      .map((key) => ({
-        name: fields[key],
-        original: original[key],
-        current: current[key],
-      })),
-    lines: [original.lines, current.lines],
+    differences,
+    lines,
+    hasDifferences: differences.length > 0 || lines.some((side) => side.length),
   }
 })
 
@@ -51,13 +54,19 @@ function lineText(line: ComparedLine) {
     aria-labelledby="conflict-differences"
   >
     <div class="section-heading">
-      <h2 id="conflict-differences">Differences from the original</h2>
+      <h2 id="conflict-differences">
+        {{
+          comparison.hasDifferences
+            ? 'Differences from the original'
+            : 'Matches a previously recorded invoice'
+        }}
+      </h2>
       <a v-if="pdf" :href="pdf" target="_blank" rel="noopener"
         >{{ originalId }} PDF ↗</a
       >
       <span v-else class="mono">{{ originalId }}</span>
     </div>
-    <div class="table-scroll">
+    <div v-if="comparison.hasDifferences" class="table-scroll">
       <table class="fact-table">
         <thead>
           <tr>
@@ -89,5 +98,9 @@ function lineText(line: ComparedLine) {
         </tbody>
       </table>
     </div>
+    <p v-else>
+      The corrected reading matches the original. Review the documents before
+      accounting.
+    </p>
   </section>
 </template>

@@ -1,8 +1,31 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { InvoiceFacts } from '../api'
+import { computed, ref, watch } from 'vue'
+import type { CorrectableFact, InvoiceFacts } from '../api'
+import InvoiceFactSource from './InvoiceFactSource.vue'
 
-const props = defineProps<{ facts: InvoiceFacts; pdf?: string }>()
+const props = defineProps<{
+  facts: InvoiceFacts
+  pdf?: string
+  caseId: string
+  revision: number
+  correctableFacts: CorrectableFact[]
+}>()
+const emit = defineEmits<{ refresh: [message: string] }>()
+const editing = ref('')
+watch(
+  () => props.revision,
+  () => {
+    editing.value = ''
+  },
+)
+const editable = computed(
+  () => new Map(props.correctableFacts.map((field) => [field.path, field])),
+)
+
+function refresh(message: string) {
+  editing.value = ''
+  emit('refresh', message)
+}
 
 type FactRow = [path: string, label: string, value: string | null]
 
@@ -79,6 +102,20 @@ const groups = computed<Record<string, FactRow[]>>(() => {
   }
 })
 
+const editableGroups = computed(() =>
+  Object.fromEntries(
+    Object.entries(groups.value).map(([group, rows]) => [
+      group,
+      rows.map(([path, label, value]) => ({
+        path,
+        label,
+        value,
+        field: editable.value.get(path),
+      })),
+    ]),
+  ),
+)
+
 const citations = computed(() => {
   const byPath = new Map<string, InvoiceFacts['evidence']>()
   for (const quote of props.facts.evidence) {
@@ -110,7 +147,7 @@ const missing = computed(
       >
     </div>
     <details
-      v-for="(rows, group) in groups"
+      v-for="(rows, group) in editableGroups"
       :key="group"
       class="fact-group"
       :open="group === 'Document'"
@@ -126,22 +163,24 @@ const missing = computed(
             </tr>
           </thead>
           <tbody>
-            <tr v-for="[path, label, value] in rows" :key="path">
+            <tr v-for="{ path, label, value, field } in rows" :key="path">
               <th scope="row">{{ label }}</th>
               <td :class="value === null ? 'muted' : 'mono'">
                 {{ value ?? missing.get(path) ?? 'No value recorded' }}
               </td>
               <td>
-                <ul v-if="citations.has(path)" class="fact-values">
-                  <li
-                    v-for="(quote, index) in citations.get(path)"
-                    :key="index"
-                  >
-                    <q>{{ quote.excerpt }}</q>
-                    <span class="muted">Page {{ quote.page }}</span>
-                  </li>
-                </ul>
-                <span v-else class="muted">—</span>
+                <InvoiceFactSource
+                  :case-id="caseId"
+                  :revision="revision"
+                  :label="label"
+                  :value="value"
+                  :quotes="citations.get(path)"
+                  :field="field"
+                  :editing="editing === path"
+                  @edit="editing = path"
+                  @cancel="editing = ''"
+                  @refresh="refresh"
+                />
               </td>
             </tr>
           </tbody>

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using InvoiceDesk.Core.Cases;
+using InvoiceDesk.Core.Cases.HumanResolution;
 using InvoiceDesk.Core.Model;
 using InvoiceDesk.Core.Rules;
 using InvoiceDesk.Core.Validation;
@@ -29,6 +30,8 @@ internal static class CaseEndpoints
         );
         cases.MapGet("/{caseId}/proposals/{proposalId}/confirmation-preview", ReadPreview);
         cases.MapPost("/{caseId}/confirmations", ConfirmProposal);
+        cases.MapPost("/{caseId}/discrepancy-acceptances", AcceptDiscrepancy);
+        cases.MapPost("/{caseId}/fact-corrections", CorrectFact);
         cases.MapPost("/{caseId}/rechecks", RecheckInvoice);
         cases.MapGet(
             "/{caseId}/sources/{index:int}/pdf",
@@ -83,22 +86,15 @@ internal static class CaseEndpoints
         }
     }
 
-    private static async Task<IResult> ConfirmProposal(
+    private static Task<IResult> ConfirmProposal(
         string caseId,
         HttpRequest request,
         CaseReader reader,
         CaseService service,
         ILogger<Program> logger,
         CancellationToken cancellation
-    )
-    {
-        if (!reader.Exists(caseId))
-            return Results.NotFound();
-
-        try
+    ) => ReadForm<ConfirmationForm>(caseId, request, reader, cancellation, form =>
         {
-            var body = await JsonNode.ParseAsync(request.Body, cancellationToken: cancellation);
-            var form = IntakeValidation.Read<ConfirmationForm>(body, "");
             var response = service.ConfirmProposal(caseId, form);
             logger.LogInformation(
                 "Confirmed proposal {ProposalId} for case {CaseId} at revision {Revision}",
@@ -107,16 +103,76 @@ internal static class CaseEndpoints
                 response.Result.InputRevision
             );
             return Json(response);
+        });
+
+    private static Task<IResult> AcceptDiscrepancy(
+        string caseId,
+        HttpRequest request,
+        CaseReader reader,
+        CaseService service,
+        ILogger<Program> logger,
+        CancellationToken cancellation
+    ) => ReadForm<AcceptanceForm>(caseId, request, reader, cancellation, form =>
+        {
+            var acceptance = service.AcceptDiscrepancy(caseId, form);
+            logger.LogInformation(
+                "Accepted discrepancy for case {CaseId} at revision {Revision}",
+                caseId,
+                form.ExpectedRevision
+            );
+            return Json(acceptance);
+        });
+
+    private static Task<IResult> CorrectFact(
+        string caseId,
+        HttpRequest request,
+        CaseReader reader,
+        CaseService service,
+        ILogger<Program> logger,
+        CancellationToken cancellation
+    ) => ReadForm<FactCorrectionForm>(caseId, request, reader, cancellation, form =>
+        {
+            var response = service.CorrectFact(caseId, form);
+            logger.LogInformation(
+                "Corrected fact {FieldPath} for case {CaseId} at revision {Revision}",
+                form.FieldPath,
+                caseId,
+                response.Result.InputRevision
+            );
+            return Json(response);
+        });
+
+    private static async Task<IResult> ReadForm<T>(
+        string caseId,
+        HttpRequest request,
+        CaseReader reader,
+        CancellationToken cancellation,
+        Func<T, IResult> handle
+    )
+    {
+        if (!reader.Exists(caseId))
+            return Results.NotFound();
+
+        try
+        {
+            var body = await JsonNode.ParseAsync(
+                request.Body,
+                documentOptions: new() { AllowDuplicateProperties = false },
+                cancellationToken: cancellation
+            );
+            return handle(IntakeValidation.Read<T>(body, ""));
         }
         catch (JsonException)
         {
-            return BadRequest(
-                new InvoiceValidationException("", "Expected a JSON confirmation form.")
-            );
+            return BadRequest(new InvoiceValidationException("", "Expected a JSON action form."));
         }
         catch (InvoiceValidationException error)
         {
             return BadRequest(error);
+        }
+        catch (UnsupportedInvoiceCaseException error)
+        {
+            return BadRequest(new InvoiceValidationException(error.Path, error.FieldMessage));
         }
     }
 

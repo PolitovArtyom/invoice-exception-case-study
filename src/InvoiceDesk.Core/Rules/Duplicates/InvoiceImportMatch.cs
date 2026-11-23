@@ -7,7 +7,8 @@ namespace InvoiceDesk.Core.Rules.Duplicates;
 internal sealed record InvoiceImportMatch(
     OriginalInvoice Original,
     NormalizedInvoiceFacts Facts,
-    bool IsDuplicate
+    bool IsDuplicate,
+    bool IsCorrectionConflict = false
 )
 {
     public static InvoiceImportMatch? Find(
@@ -15,11 +16,19 @@ internal sealed record InvoiceImportMatch(
         InvoiceBusinessKey key,
         CompanyData companyData,
         IEnumerable<EarlierImport> earlierImports,
-        string? activeContentSha256
+        string? activeContentSha256,
+        InvoiceFacts? previousFacts,
+        bool hasCorrectionConflict
     )
     {
         bool isReassessment = activeContentSha256 is not null;
         var current = InvoiceContent.Normalize(facts);
+        bool correctionChangedComparison =
+            previousFacts is not null
+            && (
+                InvoiceParties.Resolve(previousFacts, companyData).Key != key
+                || !InvoiceContent.Equal(InvoiceContent.Normalize(previousFacts), current)
+            );
         var localVersions = earlierImports
             .Where(invoice => InvoiceParties.Resolve(invoice.Facts, companyData).Key == key)
             .Select(invoice => (invoice.Original, Facts: InvoiceContent.Normalize(invoice.Facts)))
@@ -48,7 +57,7 @@ internal sealed record InvoiceImportMatch(
         {
             if (InvoiceContent.Equal(candidate.Facts, current))
             {
-                if (isReassessment)
+                if (isReassessment && !correctionChangedComparison && !hasCorrectionConflict)
                     continue;
 
                 var original = candidate.Original;
@@ -64,7 +73,12 @@ internal sealed record InvoiceImportMatch(
                         ?? original;
                 }
 
-                return new(original, candidate.Facts, true);
+                return new(
+                    original,
+                    candidate.Facts,
+                    !isReassessment,
+                    IsCorrectionConflict: isReassessment
+                );
             }
 
             first ??= new(candidate.Original, candidate.Facts, false);
