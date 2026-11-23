@@ -1,0 +1,3 @@
+[mcp_servers.invoice]
+url = "http://127.0.0.1:8080/mcp"
+default_tools_approval_mode = "approve"

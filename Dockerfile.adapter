@@ -1,0 +1,21 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0.100 AS publish
+WORKDIR /source
+COPY global.json Directory.Build.props Directory.Packages.props ./
+COPY dataset/schemas/ dataset/schemas/
+COPY src/InvoiceDesk.Core/ src/InvoiceDesk.Core/
+COPY src/InvoiceDesk.Adapter/ src/InvoiceDesk.Adapter/
+ARG RID
+ARG TARGETARCH
+RUN case "$TARGETARCH" in amd64) architecture=x64 ;; *) architecture=$TARGETARCH ;; esac \
+    && rid="${RID:-linux-$architecture}" \
+    && dotnet publish src/InvoiceDesk.Adapter -c Release -r "$rid" \
+        --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false \
+        -p:PublishReadyToRun=false -o /out
+
+FROM scratch AS export
+COPY --from=publish /out/ /
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.15 AS runtime
+WORKDIR /app
+COPY --from=publish /out/ ./
+ENTRYPOINT ["/app/InvoiceDesk.Adapter"]

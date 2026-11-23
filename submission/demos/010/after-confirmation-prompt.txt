@@ -1,0 +1,1 @@
+A scripted browser submitted the AP clerk's confirmation form on the case-010 page as Demo AP Clerk. Call assess_invoice, then read the saved assessment and history. Report the decisions in order, who confirmed the proposal, the two line-match sources and whether this re-check saved another assessment. Use the recorded application results.

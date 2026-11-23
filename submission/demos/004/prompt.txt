@@ -1,0 +1,1 @@
+Check case-004. Use open_case to get the registered source and schema. Read the isolated ./document-001.pdf copy. Register the printed facts, then read the saved result and history. Explain the decision, any failed check, what the clerk should investigate, and whether a human confirmation exists.

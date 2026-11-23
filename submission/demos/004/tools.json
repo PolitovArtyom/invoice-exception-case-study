@@ -1,0 +1,10 @@
+[
+  "Read",
+  "mcp__invoice__assess_invoice",
+  "mcp__invoice__get_assessment",
+  "mcp__invoice__get_case_history",
+  "mcp__invoice__get_company_data",
+  "mcp__invoice__open_case",
+  "mcp__invoice__propose_match",
+  "mcp__invoice__register_invoice"
+]

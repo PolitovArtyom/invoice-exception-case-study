@@ -8,3 +8,11 @@ node_modules/
 results/
 review-private/
 reviewer-private/
+bin/
+obj/
+dist/
+wwwroot/
+TestResults/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

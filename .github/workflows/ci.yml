@@ -1,0 +1,99 @@
+name: CI
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Build Release
+        run: dotnet build InvoiceDesk.slnx -c Release
+      - name: Check CSharpier formatting
+        run: |
+          dotnet tool restore
+          dotnet csharpier check .
+      - name: Verify .NET style and analyzers
+        run: |
+          dotnet format style InvoiceDesk.slnx --verify-no-changes --no-restore
+          dotnet format analyzers InvoiceDesk.slnx --verify-no-changes --no-restore
+      - name: Run tests
+        run: dotnet test InvoiceDesk.slnx -c Release --no-build --logger GitHubActions
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.3'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Check Prettier formatting
+        run: npm run format:check
+      - name: Build
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compose smoke
+        run: |
+          docker compose up --build --wait
+          curl --fail --silent --show-error http://127.0.0.1:8080/health | jq -e '.status == "ok"'
+      - name: Stop Compose
+        if: always()
+        run: docker compose down
+
+  runner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ADAPTER: dist/linux-x64/InvoiceDesk.Adapter
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Export Linux native adapter
+        run: docker build -f Dockerfile.adapter --target export --build-arg RID=linux-x64 --output type=local,dest=dist/linux-x64 .
+      - name: Run public acceptance
+        env:
+          CDPATH: .
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+          .venv/bin/python tools/run_evals.py --adapter "$ADAPTER" --report-dir 'results/ci/public runner'
+          jq -e '(.summary | .cases_total == 10 and .cases_passed == 10 and .steps_total == 12 and .steps_passed == 12 and .adapter_failures == 0 and .critical_false_clear == 0) and all(.cases[].steps[]; (.differences | length) == 0)' 'results/ci/public runner/eval-report.json'
+      - name: Check validation exit status
+        env:
+          CDPATH: .
+        run: |
+          status=0
+          "$ADAPTER" --state-dir 'results/ci/validation, state' <<< '{}' > results/ci/validation.json || status=$?
+          test "$status" -eq 2
+          jq -e '.error.code == "VALIDATION_ERROR"' results/ci/validation.json
+      - name: Upload public runner report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: public-runner-report-native
+          path: results/ci/public runner/eval-report.*

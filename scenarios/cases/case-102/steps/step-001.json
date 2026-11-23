@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0",
+  "case_id": "case-102",
+  "step": 1,
+  "as_of": "2026-11-10",
+  "policy_ref": "core-v1",
+  "context": {
+    "context_version": "CTX-102-v1",
+    "purchase_orders": {
+      "schema_version": "1.0",
+      "orders": [
+        {
+          "order_id": "ORD-102",
+          "reference": "PO-2026-7102",
+          "status": "open",
+          "supplier_id": "SUP-102",
+          "buyer_id": "BUYER-102",
+          "currency": "EUR",
+          "lines": [
+            {
+              "line_id": "OL-102-01",
+              "sku": "GLOVE",
+              "description": "Safety gloves",
+              "explicit_aliases": [],
+              "quantity": "2",
+              "unit": "pcs",
+              "unit_net_price": "10.00",
+              "tax_rate": "0.20"
+            },
+            {
+              "line_id": "OL-102-02",
+              "sku": "TAPE",
+              "description": "Safety tape",
+              "explicit_aliases": [],
+              "quantity": "2",
+              "unit": "pcs",
+              "unit_net_price": "6.40",
+              "tax_rate": "0.20"
+            }
+          ]
+        }
+      ]
+    },
+    "goods_receipts": {
+      "schema_version": "1.0",
+      "availability": "available",
+      "receipts": [
+        {
+          "receipt_id": "REC-102-01",
+          "order_id": "ORD-102",
+          "order_line_id": "OL-102-01",
+          "accepted_quantity": "2",
+          "unit": "pcs",
+          "accepted_at": "2026-11-02",
+          "status": "accepted"
+        },
+        {
+          "receipt_id": "REC-102-02",
+          "order_id": "ORD-102",
+          "order_line_id": "OL-102-02",
+          "accepted_quantity": "2",
+          "unit": "pcs",
+          "accepted_at": "2026-11-02",
+          "status": "accepted"
+        }
+      ]
+    },
+    "suppliers": {
+      "schema_version": "1.0",
+      "suppliers": [
+        {
+          "supplier_id": "SUP-102",
+          "legal_name": "Workshop Supplies GmbH",
+          "registration_id": "DE-SYN-10102",
+          "country": "DE",
+          "approved_bank_accounts": [
+            { "iban": "DE00SYNTHETIC0000000102", "bic": "SYNBDE00" }
+          ]
+        }
+      ]
+    },
+    "buyers": {
+      "schema_version": "1.0",
+      "buyers": [
+        {
+          "buyer_id": "BUYER-102",
+          "legal_name": "Fictional Siteworks d.o.o.",
+          "registration_id": "RS-SYN-40102",
+          "country": "RS",
+          "explicit_aliases": []
+        }
+      ]
+    },
+    "invoice_history": { "schema_version": "1.0", "documents": [] }
+  },
+  "document": {
+    "content_sha256": "40481ac7e03bd7cea9f1e70f84c7c5a4cbce23052cdca118426ee7c46338a7f7",
+    "facts": {
+      "schema_version": "1.0",
+      "document_id": "DOC-102",
+      "type": "invoice",
+      "number": "INV-2026-4102",
+      "issue_date": "2026-11-03",
+      "due_date": "2026-12-03",
+      "currency": "EUR",
+      "purchase_order_reference": "PO-2026-7102",
+      "payment_terms": "Bank transfer within 30 days",
+      "supplier": {
+        "legal_name": "Workshop Supplies GmbH",
+        "registration_id": "DE-SYN-10102",
+        "country": "DE"
+      },
+      "buyer": {
+        "legal_name": "Fictional Siteworks d.o.o.",
+        "registration_id": "RS-SYN-40102",
+        "country": "RS"
+      },
+      "bank": { "iban": "DE00SYNTHETIC0000000102", "bic": "SYNBDE00" },
+      "lines": [
+        {
+          "line_id": "L01",
+          "description": "Safety gloves",
+          "sku": "GLOVE",
+          "quantity": "2",
+          "unit": "pcs",
+          "unit_net_price": "10.00",
+          "declared_net_amount": "20.00",
+          "tax_rate": "0.20",
+          "declared_tax_amount": "4.00"
+        },
+        {
+          "line_id": "L02",
+          "description": "Safety tape",
+          "sku": "TAPE",
+          "quantity": "2",
+          "unit": "pcs",
+          "unit_net_price": "64.00",
+          "declared_net_amount": "12.80",
+          "tax_rate": "0.20",
+          "declared_tax_amount": "2.56"
+        }
+      ],
+      "declared_subtotal": "32.80",
+      "declared_tax_total": "6.56",
+      "declared_total": "39.36",
+      "missing_fields": [],
+      "evidence": [
+        { "field_path": "/due_date", "document_id": "DOC-102", "page": 1, "excerpt": "2026-12-03" },
+        { "field_path": "/lines/1/unit_net_price", "document_id": "DOC-102", "page": 1, "excerpt": "6.40" }
+      ]
+    }
+  }
+}

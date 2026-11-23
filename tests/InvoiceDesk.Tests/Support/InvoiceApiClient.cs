@@ -1,0 +1,97 @@
+using System.Net.Http.Json;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Mvc.Testing;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
+
+namespace InvoiceDesk.Tests.Support;
+
+internal static class InvoiceApiClient
+{
+    public static async Task<McpClient> ConnectMcp(WebApplicationFactory<Program> application)
+    {
+        var http = application.CreateClient();
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
+            {
+                Endpoint = new Uri(http.BaseAddress!, "mcp"),
+                TransportMode = HttpTransportMode.StreamableHttp,
+            },
+            http,
+            ownsHttpClient: true
+        );
+        return await McpClient.CreateAsync(transport);
+    }
+
+    public static ValueTask<CallToolResult> Call(
+        McpClient client,
+        string tool,
+        string caseId = CaseTestEnvironment.ReviewerCaseId
+    ) => client.CallToolAsync(tool, new Dictionary<string, object?> { ["case_id"] = caseId });
+
+    public static ValueTask<CallToolResult> Register(McpClient client, JsonNode facts) =>
+        Register(
+            client,
+            facts,
+            new
+            {
+                root = "own",
+                relative_path = $"cases/{CaseTestEnvironment.ReviewerCaseId}/documents/document-001.pdf",
+            }
+        );
+
+    public static ValueTask<CallToolResult> Register(
+        McpClient client,
+        JsonNode facts,
+        object? source,
+        string caseId = CaseTestEnvironment.ReviewerCaseId
+    ) =>
+        client.CallToolAsync(
+            "register_invoice",
+            new Dictionary<string, object?>
+            {
+                ["case_id"] = caseId,
+                ["source"] = source,
+                ["facts"] = facts,
+            }
+        );
+
+    public static ValueTask<CallToolResult> Propose(
+        McpClient client,
+        JsonNode proposal,
+        string caseId = CaseTestEnvironment.ReviewerCaseId
+    ) =>
+        client.CallToolAsync(
+            "propose_match",
+            new Dictionary<string, object?> { ["case_id"] = caseId, ["proposal"] = proposal }
+        );
+
+    public static Task<HttpResponseMessage> Recheck(HttpClient browser, string caseId) =>
+        browser.PostAsync($"/api/cases/{caseId}/rechecks", null);
+
+    public static Task<HttpResponseMessage> Confirm(
+        HttpClient browser,
+        string caseId,
+        JsonNode form
+    ) => browser.PostAsJsonAsync($"/api/cases/{caseId}/confirmations", form);
+
+    public static async Task<JsonNode> Body(HttpResponseMessage response) =>
+        JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+
+    public static JsonNode Payload(CallToolResult result, bool isError = false)
+    {
+        string payload = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+        Assert.True(isError == (result.IsError == true), payload);
+        return JsonNode.Parse(payload)!;
+    }
+
+    public static async Task<JsonNode> Read(HttpClient browser, string path)
+    {
+        using var response = await browser.GetAsync(path);
+        response.EnsureSuccessStatusCode();
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+    }
+
+    public static void AssertSameJson(JsonNode? expected, JsonNode? actual) =>
+        Assert.True(JsonNode.DeepEquals(expected, actual), $"Expected {expected}, got {actual}.");
+}

@@ -1,0 +1,206 @@
+{
+  "schema_version": "1.0",
+  "document_id": "DOC-912",
+  "type": "invoice",
+  "number": "INV-SEAL-912",
+  "issue_date": "2026-11-01",
+  "due_date": "2026-11-15",
+  "currency": "EUR",
+  "purchase_order_reference": "PO-SEAL-912",
+  "payment_terms": "14 days",
+  "supplier": {
+    "legal_name": "Example Seal Supply GmbH",
+    "registration_id": "DE-SYN-91201",
+    "country": "DE"
+  },
+  "buyer": {
+    "legal_name": "Example Workshop d.o.o.",
+    "registration_id": "RS-SYN-91201",
+    "country": "RS"
+  },
+  "bank": {
+    "iban": "DE00SYNTHETIC0000000912",
+    "bic": "SYNBDE00"
+  },
+  "lines": [
+    {
+      "line_id": "L01",
+      "description": "Pump gasket 40 mm",
+      "sku": "GSK-40",
+      "quantity": "3",
+      "unit": "pcs",
+      "unit_net_price": "2.50",
+      "declared_net_amount": "7.50",
+      "tax_rate": "0.20",
+      "declared_tax_amount": "1.50"
+    }
+  ],
+  "declared_subtotal": "7.50",
+  "declared_tax_total": "1.50",
+  "declared_total": "9.00",
+  "missing_fields": [],
+  "evidence": [
+    {
+      "field_path": "/type",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "INVOICE INV-SEAL-912"
+    },
+    {
+      "field_path": "/number",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "INVOICE INV-SEAL-912"
+    },
+    {
+      "field_path": "/issue_date",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Issue date: 2026-11-01"
+    },
+    {
+      "field_path": "/due_date",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Payment due: 2026-11-15"
+    },
+    {
+      "field_path": "/payment_terms",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Payment terms: 14 days"
+    },
+    {
+      "field_path": "/currency",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Currency: EUR"
+    },
+    {
+      "field_path": "/purchase_order_reference",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Purchase order: PO-SEAL-912"
+    },
+    {
+      "field_path": "/supplier/legal_name",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Supplier: Example Seal Supply GmbH"
+    },
+    {
+      "field_path": "/supplier/registration_id",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Supplier registration: DE-SYN-91201"
+    },
+    {
+      "field_path": "/supplier/country",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Supplier country: DE"
+    },
+    {
+      "field_path": "/buyer/legal_name",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Buyer: Example Workshop d.o.o."
+    },
+    {
+      "field_path": "/buyer/registration_id",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Buyer registration: RS-SYN-91201"
+    },
+    {
+      "field_path": "/buyer/country",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Buyer country: RS"
+    },
+    {
+      "field_path": "/bank/iban",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "IBAN: DE00SYNTHETIC0000000912"
+    },
+    {
+      "field_path": "/bank/bic",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "BIC: SYNBDE00"
+    },
+    {
+      "field_path": "/lines/0/line_id",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "L01 GSK-40 Pump gasket 40 mm"
+    },
+    {
+      "field_path": "/lines/0/sku",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "L01 GSK-40 Pump gasket 40 mm"
+    },
+    {
+      "field_path": "/lines/0/description",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "L01 GSK-40 Pump gasket 40 mm"
+    },
+    {
+      "field_path": "/lines/0/quantity",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Quantity: 3 pcs"
+    },
+    {
+      "field_path": "/lines/0/unit",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Quantity: 3 pcs"
+    },
+    {
+      "field_path": "/lines/0/unit_net_price",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Unit net price: 2.50"
+    },
+    {
+      "field_path": "/lines/0/declared_net_amount",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Line net: 7.50"
+    },
+    {
+      "field_path": "/lines/0/tax_rate",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "VAT rate: 20%"
+    },
+    {
+      "field_path": "/lines/0/declared_tax_amount",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Line tax: 1.50"
+    },
+    {
+      "field_path": "/declared_subtotal",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Subtotal: 7.50"
+    },
+    {
+      "field_path": "/declared_tax_total",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Total tax: 1.50"
+    },
+    {
+      "field_path": "/declared_total",
+      "document_id": "DOC-912",
+      "page": 1,
+      "excerpt": "Total due: 9.00"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p -- "$2"
+state_directory=$(CDPATH= cd -- "$2" && pwd -P)
+mount_directory=${state_directory//\"/\"\"}
+exec docker run --rm -i --pull=never --network none \
+    --user "$(id -u):$(id -g)" \
+    --mount "type=bind,\"src=$mount_directory\",\"dst=$mount_directory\"" \
+    invoice-adapter:local --state-dir "$state_directory"
